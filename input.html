@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quét nhập · 스캔 입력</title>
+<!-- Mold Tracking - input.html  v1.0 (2026-10-04)
+     v1.0: first version (stage 0). Scan the slip QR -> part name and current state -> Nhap (IN) / Xuat (OUT).
+           Camera loop taken from the tested scan.html v1.4 (own loop, BarcodeDetector + jsQR, full frame / centre zoom).
+           No typing: the sheet address arrives by the setup QR (#gas=...), worker and process are picked from lists.
+           If no QR is read within 3 s, a "pick from list" button appears (mold -> part).
+           After a record the same code is ignored for 5 s, so the slip just handled is not read again at once.
+     Host: GitHub Pages (same folder as register.html and slip.html). Open in Chrome or Safari, not inside Zalo.
+     Address options: input.html?p=QC fixes the process for that shortcut. -->
+<style>
+  :root { --ink: #1f2a24; --paper: #f4f5f3; --line: #c9cec9; --go: #2e7d5b; --alt: #3b6ea5; --stop: #8a8f8c; --ng: #c0392b; --soft: #6b736e; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Malgun Gothic", sans-serif;
+         margin: 0 auto; padding: 10px; background: var(--paper); color: var(--ink); max-width: 520px; }
+  small { font-weight: 400; font-size: .72em; opacity: .85; margin-left: 6px; }
+  .card { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+  .card h2 { font-size: 16px; margin: 0 0 8px; }
+  button { display: block; width: 100%; padding: 18px 12px; margin: 8px 0; font-size: 20px; font-weight: 700; border: 0;
+           border-radius: 12px; color: #fff; text-align: center; font-family: inherit; }
+  button:disabled { opacity: .4; }
+  button:focus-visible, input:focus-visible { outline: 3px solid #f0b429; outline-offset: 2px; }
+  .go { background: var(--go); } .alt { background: var(--alt); } .stop { background: var(--stop); }
+  .big { padding: 30px 12px; font-size: 26px; }
+  .opt { background: #fff; color: var(--ink); border: 2px solid var(--line); font-size: 17px; padding: 13px 12px; text-align: left; margin: 6px 0; }
+  .opt.on { border-color: var(--go); background: #e6f2ec; }
+  #bar { display: flex; align-items: center; background: var(--ink); color: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+  #barText { flex: 1; font-size: 17px; font-weight: 700; line-height: 1.25; }
+  #barText span { display: block; font-size: 13px; font-weight: 400; opacity: .8; }
+  #btnSet { width: auto; margin: 0; padding: 8px 12px; font-size: 14px; background: #46544c; }
+  #videoBox { position: relative; display: none; }
+  #video { width: 100%; border-radius: 10px; background: #000; display: block; }
+  #aim { position: absolute; left: 50%; top: 50%; width: 46%; aspect-ratio: 1; transform: translate(-50%, -50%);
+         border: 3px solid rgba(255,255,255,.9); border-radius: 10px; box-shadow: 0 0 0 2000px rgba(0,0,0,.25); pointer-events: none; }
+  #videoBox { overflow: hidden; border-radius: 10px; }
+  .msg { font-size: 15px; white-space: pre-wrap; margin: 6px 2px; }
+  .ok { color: var(--go); } .ng { color: var(--ng); }
+  .small { font-size: 12px; color: var(--soft); word-break: break-all; }
+  #pCode { font-family: Consolas, "Courier New", monospace; font-size: 26px; font-weight: 700; word-break: break-all; }
+  #pName { font-size: 21px; font-weight: 700; margin-top: 4px; }
+  #pVi { font-size: 17px; }
+  #pMold, #pState { font-size: 15px; margin-top: 6px; }
+  #pState { padding: 8px 10px; background: #eef0ee; border-radius: 8px; }
+  #done { text-align: center; padding: 26px 12px; }
+  #done .mark { font-size: 64px; line-height: 1; color: var(--go); }
+  #done .what { font-size: 24px; font-weight: 700; margin-top: 8px; }
+  #done .code { font-family: Consolas, "Courier New", monospace; font-size: 18px; margin-top: 6px; }
+  input[type=text] { width: 100%; padding: 12px; font-size: 15px; border: 1px solid var(--line); border-radius: 8px; }
+  .view { display: none; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+</head>
+<body>
+
+<div id="bar" style="display:none">
+  <div id="barText"></div>
+  <button id="btnSet">Cài đặt<small>설정</small></button>
+</div>
+
+<!-- setup: sheet address (by QR), worker, process -->
+<div class="view" id="vSetup">
+  <div class="card" id="needGas">
+    <h2>Chưa có địa chỉ Sheet <small>시트 주소 없음</small></h2>
+    <div class="msg">Mở camera điện thoại và quét mã QR cài đặt trên máy tính (trang Đăng ký).
+PC 등록 화면에 나오는 설정 QR을 폰 기본 카메라로 읽으십시오.</div>
+    <input type="text" id="gasUrl" placeholder="https://script.google.com/macros/s/.../exec">
+    <button class="alt" id="btnGas">Lưu địa chỉ<small>주소 저장</small></button>
+  </div>
+  <div class="card" id="setWorker">
+    <h2>Bạn là ai? <small>작업자 선택</small></h2>
+    <div id="workers"></div>
+  </div>
+  <div class="card" id="setProc">
+    <h2>Công đoạn nào? <small>공정 선택</small></h2>
+    <div id="procs"></div>
+  </div>
+  <div class="msg" id="setMsg"></div>
+  <button class="go" id="btnSetDone" disabled>Xong<small>완료</small></button>
+</div>
+
+<!-- scan: one question = which part is in front of me -->
+<div class="view" id="vScan">
+  <div class="card">
+    <button class="go big" id="btnStart">Quét QR<small>스캔</small></button>
+    <div id="videoBox"><video id="video"></video><div id="aim"></div></div>
+    <div class="msg" id="scanMsg"></div>
+    <button class="alt" id="btnCam" style="display:none">Đổi camera<small>카메라 바꾸기</small></button>
+    <button class="stop" id="btnList" style="display:none">Chọn từ danh sách<small>목록에서 선택</small></button>
+    <div class="small" id="camInfo"></div>
+  </div>
+</div>
+
+<!-- part: name + state, then one button -->
+<div class="view" id="vPart">
+  <div class="card">
+    <div id="pCode"></div>
+    <div id="pName"></div>
+    <div id="pVi"></div>
+    <div id="pMold"></div>
+    <div id="pState"></div>
+  </div>
+  <button class="go big" id="btnIn">Nhập<small>입고</small></button>
+  <button class="alt big" id="btnOut">Xuất<small>출고</small></button>
+  <div class="msg" id="partMsg"></div>
+  <button class="stop" id="btnBack">Quét lại<small>다시 스캔</small></button>
+</div>
+
+<div class="view" id="vDone">
+  <div class="card" id="done"><div class="mark">✓</div><div class="what" id="doneWhat"></div><div class="code" id="doneCode"></div></div>
+</div>
+
+<!-- list: fallback when the QR cannot be read -->
+<div class="view" id="vList">
+  <div class="card">
+    <h2 id="listTitle"></h2>
+    <div class="msg" id="listMsg"></div>
+    <div id="listBox"></div>
+  </div>
+  <button class="stop" id="btnListBack">Quay lại<small>돌아가기</small></button>
+</div>
+
+<div class="card"><div class="small" id="selfcheck">Script chưa chạy · 프로그램 실행 안 됨</div></div>
+
+<script>
+  var VER = '1.0', PAGE = 'input';
+  var $ = function (id) { return document.getElementById(id); };
+  var GAS_RE = /^https:\/\/script\.google\.com\/.+\/exec$/;
+  var ID_RE = /^H(R)?[MPD][0-9]{5}[A-Z0-9]{1,11}$/;
+  var STATE_TXT = { WAIT: 'chờ · 대기', RUN: 'đang làm · 진행 중', DONE: 'xong · 완료', MOVE: 'đã xuất · 출고됨', NG: 'không đạt · 불합격', HOLD: 'tạm dừng · 중단' };
+  var EVENT_TXT = { IN: 'Nhập · 입고', OUT: 'Xuất · 출고' };
+
+  function lsGet(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function lsObj(k) { try { return JSON.parse(lsGet(k) || 'null'); } catch (e) { return null; } }
+
+  // Setup QR: input.html#gas=<address>. Stored once, then removed from the address bar.
+  var hash = location.hash.match(/gas=([^&]+)/);
+  if (hash) {
+    var fromQr = decodeURIComponent(hash[1]);
+    if (GAS_RE.test(fromQr)) lsSet('mt_gasUrl', fromQr);
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  }
+  window.addEventListener('hashchange', function () { if (/gas=/.test(location.hash)) location.reload(); });
+  var GAS_URL = lsGet('mt_gasUrl');
+  var worker = lsObj('mt_worker'), proc = lsObj('mt_process');
+  var fixedProc = (location.search.match(/[?&]p=([^&]+)/) || [])[1] || '';
+  var masters = null, cur = null, busy = false, backTimer = null, lastCode = '', lastTime = 0;
+
+  function api(action, data) {
+    var body = data || {};
+    body.action = action; body.device = navigator.userAgent;
+    if (!GAS_RE.test(GAS_URL)) return Promise.reject(new Error('NO_SHEET_ADDRESS'));
+    return fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (!j.ok) throw new Error(j.error); return j; });
+  }
+  function errText(e) { return (e && e.name && e.name !== 'Error' ? e.name + ': ' : '') + (e && e.message ? e.message : String(e)); }
+  function logErr(e) { api('logError', { page: PAGE, error: errText(e) }).catch(function () {}); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  function view(id) {
+    ['vSetup', 'vScan', 'vPart', 'vDone', 'vList'].forEach(function (v) { $(v).style.display = (v === id ? 'block' : 'none'); });
+    $('bar').style.display = (id === 'vSetup' ? 'none' : 'flex');
+    if (id !== 'vScan') stopScan();
+    window.scrollTo(0, 0);
+  }
+  function drawBar() {
+    $('barText').innerHTML = esc(proc ? proc.name_vi : '?') + '<small>' + esc(proc ? proc.name_ko : '') + '</small>' +
+                             '<span>' + esc(worker ? worker.name : '') + '</span>';
+  }
+
+  // ---------- setup ----------
+  function options(box, list, picked, label, onPick) {
+    box.innerHTML = '';
+    list.forEach(function (item) {
+      var b = document.createElement('button');
+      b.className = 'opt' + (picked && String(picked.code) === String(item.code) ? ' on' : '');
+      b.innerHTML = label(item);
+      b.onclick = function () { onPick(item); };
+      box.appendChild(b);
+    });
+  }
+  function drawSetup() {
+    var hasGas = GAS_RE.test(GAS_URL);
+    $('needGas').style.display = hasGas ? 'none' : 'block';
+    $('setWorker').style.display = $('setProc').style.display = (hasGas && masters) ? 'block' : 'none';
+    if (!hasGas || !masters) { $('btnSetDone').disabled = true; return; }
+    options($('workers'), masters.workers, worker, function (w) { return esc(w.name) + '<small>' + esc(w.code) + '</small>'; },
+            function (w) { worker = { code: String(w.code), name: String(w.name) }; drawSetup(); });
+    if (!masters.workers.length) $('workers').innerHTML =
+      '<div class="msg ng">Chưa có danh sách nhân viên (sheet Workers) · 작업자 목록이 비어 있습니다 (Workers 시트). 이름 없이 진행합니다.</div>';
+    var plist = masters.processes;
+    if (fixedProc) plist = plist.filter(function (p) { return String(p.code) === fixedProc; });
+    if (fixedProc && plist.length === 1) proc = { code: String(plist[0].code), name_vi: String(plist[0].name_vi), name_ko: String(plist[0].name_ko) };
+    options($('procs'), plist, proc, function (p) { return esc(p.name_vi) + '<small>' + esc(p.name_ko) + '</small>'; },
+            function (p) { proc = { code: String(p.code), name_vi: String(p.name_vi), name_ko: String(p.name_ko) }; drawSetup(); });
+    $('btnSetDone').disabled = !(proc && (worker || !masters.workers.length));
+  }
+  function openSetup() {
+    view('vSetup');
+    $('setMsg').className = 'msg'; $('setMsg').textContent = '';
+    drawSetup();
+    if (!GAS_RE.test(GAS_URL)) return;
+    $('setMsg').textContent = 'Đang tải danh sách · 목록 불러오는 중...';
+    api('masters').then(function (j) { masters = j; $('setMsg').textContent = ''; drawSetup(); })
+      .catch(function (e) { $('setMsg').className = 'msg ng'; $('setMsg').textContent = 'Lỗi tải · 불러오기 실패: ' + errText(e); });
+  }
+  $('btnGas').onclick = function () {
+    var u = $('gasUrl').value.trim();
+    if (!GAS_RE.test(u)) { $('setMsg').className = 'msg ng'; $('setMsg').textContent = 'Địa chỉ phải kết thúc bằng /exec · 주소는 /exec 로 끝나야 합니다'; return; }
+    GAS_URL = u; lsSet('mt_gasUrl', u); openSetup();
+  };
+  $('btnSetDone').onclick = function () {
+    lsSet('mt_worker', JSON.stringify(worker)); lsSet('mt_process', JSON.stringify(proc));
+    drawBar(); toScan(false);
+  };
+  $('btnSet').onclick = openSetup;
+
+  // ---------- camera scan (loop from the tested scan.html v1.4) ----------
+  var video = $('video'), canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d', { willReadFrequently: true });
+  var stream = null, timer = null, t0 = 0, working = false, camNote = '', cams = [], camIdx = -1, tickN = 0;
+  var detector = null;
+  try { if ('BarcodeDetector' in window) detector = new BarcodeDetector({ formats: ['qr_code'] }); } catch (e) { detector = null; }
+  var decoderName = (detector ? 'BarcodeDetector+' : '') + (typeof jsQR === 'function' ? 'jsQR' : 'jsQR-MISSING');
+
+  function decodeCanvas() {
+    var p = detector
+      ? detector.detect(canvas).then(function (r) { return r.length ? r[0].rawValue : null; }).catch(function () { return null; })
+      : Promise.resolve(null);
+    return p.then(function (text) {
+      if (text) return text;
+      if (typeof jsQR !== 'function') return null;
+      var img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var r = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+      return r && r.data ? r.data : null;
+    });
+  }
+  function stopStream() {
+    if (timer) { clearInterval(timer); timer = null; }
+    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+  }
+  function stopScan() {
+    stopStream();
+    $('videoBox').style.display = 'none';
+    $('btnCam').style.display = 'none';
+    $('btnStart').style.display = 'block';
+  }
+  function tick() {
+    if (working || !stream || !video.videoWidth) return;
+    working = true; tickN++;
+    var vw = video.videoWidth, vh = video.videoHeight;
+    var zoom = (tickN % 2 === 0);                              // every other frame: centre half, enlarged
+    var s = Math.min(vw, vh) * (zoom ? 0.5 : 1);
+    var out = zoom ? Math.min(1080, Math.round(s * 1.5)) : Math.min(s, 1080);
+    canvas.width = out; canvas.height = out;
+    ctx.drawImage(video, (vw - s) / 2, (vh - s) / 2, s, s, 0, 0, out, out);
+    decodeCanvas().then(function (text) {
+      working = false;
+      if (!stream) return;
+      if (text) { gotCode(text, 'scan'); return; }
+      if (Date.now() - t0 > 3000) $('btnList').style.display = 'block';      // slow phone or damaged slip
+    }).catch(function (e) {
+      working = false;
+      $('camInfo').textContent = camNote + ' / decode error: ' + errText(e);
+    });
+  }
+  function openCamera(deviceId) {
+    var v = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+    if (deviceId) v.deviceId = { exact: deviceId }; else v.facingMode = { ideal: 'environment' };
+    return navigator.mediaDevices.getUserMedia({ audio: false, video: v }).then(function (s) {
+      stream = s;
+      video.setAttribute('playsinline', ''); video.setAttribute('muted', ''); video.muted = true;
+      video.srcObject = s;
+      $('videoBox').style.display = 'block';
+      return video.play();
+    }).then(function () {
+      var track = stream.getVideoTracks()[0];
+      try { track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(function () {}); } catch (e) {}
+      return navigator.mediaDevices.enumerateDevices().catch(function () { return []; });
+    }).then(function (list) {
+      var track = stream.getVideoTracks()[0];
+      var curId = track.getSettings ? track.getSettings().deviceId : '';
+      cams = list.filter(function (d) { return d.kind === 'videoinput' && !/front|user|전면|trước/i.test(d.label || ''); });
+      camIdx = -1;
+      cams.forEach(function (d, i) { if (d.deviceId === curId) camIdx = i; });
+      $('btnCam').style.display = cams.length > 1 ? 'block' : 'none';
+      $('btnStart').style.display = 'none';
+      $('scanMsg').className = 'msg';
+      $('scanMsg').textContent = 'Đưa QR vào giữa khung, nếu mờ thì để xa hơn\nQR을 네모 안에. 흐리면 더 멀리(25~30cm)';
+      t0 = Date.now();
+      setTimeout(function () {
+        camNote = video.videoWidth + 'x' + video.videoHeight + ' / ' + decoderName + ' / cam ' + (camIdx + 1) + ' of ' + cams.length;
+        $('camInfo').textContent = camNote;
+      }, 500);
+      timer = setInterval(tick, 150);
+    });
+  }
+  function camFail(err) {
+    stopScan();
+    $('scanMsg').className = 'msg ng';
+    $('scanMsg').textContent = 'Không mở được camera · 카메라 열기 실패\n' + errText(err) +
+      '\nMở bằng Chrome hoặc Safari (không dùng Zalo) · 크롬 또는 사파리로 여십시오';
+    $('btnList').style.display = 'block';
+    logErr(err);
+  }
+  function startScan() {
+    $('scanMsg').className = 'msg'; $('scanMsg').textContent = 'Đang mở camera · 카메라 여는 중...';
+    $('btnList').style.display = 'none';
+    if (typeof jsQR !== 'function' && !detector) { camFail(new Error('DECODER_NOT_LOADED (jsQR)')); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { camFail(new Error('NO_getUserMedia')); return; }
+    openCamera(null).catch(camFail);
+  }
+  function toScan(autoStart) {
+    cur = null;
+    view('vScan');
+    $('scanMsg').textContent = ''; $('camInfo').textContent = ''; $('btnList').style.display = 'none';
+    if (autoStart) startScan();
+  }
+  $('btnStart').onclick = startScan;
+  $('btnCam').onclick = function () {
+    if (cams.length < 2) return;
+    var next = cams[(camIdx + 1) % cams.length];
+    stopStream();
+    openCamera(next.deviceId).catch(camFail);
+  };
+  document.addEventListener('visibilitychange', function () { if (document.hidden && stream) stopScan(); });
+
+  // ---------- part ----------
+  function fmtTime(t) {
+    var d = new Date(t);
+    if (isNaN(d)) return String(t || '');
+    var p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return p(d.getMonth() + 1) + '/' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  function gotCode(text, how) {
+    var code = String(text).trim().toUpperCase();
+    if (!ID_RE.test(code) || code.length >= 20) {                 // some other QR: keep scanning
+      $('scanMsg').className = 'msg ng';
+      $('scanMsg').textContent = 'Không phải mã chi tiết · 부품 코드가 아닙니다: ' + code.slice(0, 40);
+      return;
+    }
+    if (how === 'scan' && code === lastCode && Date.now() - lastTime < 5000) return;   // slip still in front of the camera
+    if (busy) return;
+    busy = true;
+    if (navigator.vibrate) navigator.vibrate(120);
+    stopScan();
+    $('btnStart').style.display = 'none';
+    $('scanMsg').className = 'msg'; $('scanMsg').textContent = code + '\nĐang tìm · 조회 중...';
+    api('lookup', { part_id: code }).then(function (j) {
+      busy = false;
+      cur = { part: j.part, how: how };
+      $('pCode').textContent = j.part.part_id;
+      $('pName').textContent = j.part.name;
+      $('pVi').textContent = j.part.name_vi;
+      $('pMold').textContent = 'Khuôn · 금형: ' + j.part.mold_id + (j.mold && j.mold.product ? '  ' + j.mold.product : '') +
+                               (j.mold && j.mold.due_date ? '   Hạn · 납기 ' + j.mold.due_date : '');
+      $('pState').textContent = j.state
+        ? 'Hiện tại · 현재: ' + j.state.process + ' / ' + (STATE_TXT[j.state.state] || j.state.state) + ' / ' + fmtTime(j.state.last_time)
+        : 'Hiện tại · 현재: chưa có ghi nhận · 기록 없음';
+      $('partMsg').textContent = '';
+      $('btnIn').disabled = $('btnOut').disabled = false;
+      view('vPart');
+    }).catch(function (e) {
+      busy = false;
+      var notFound = /PART_NOT_FOUND/.test(errText(e));
+      $('btnStart').style.display = 'block';
+      $('scanMsg').className = 'msg ng';
+      $('scanMsg').textContent = notFound
+        ? code + '\nChi tiết chưa đăng ký · 등록되지 않은 부품입니다'
+        : code + '\nLỗi tra cứu · 조회 실패: ' + errText(e);
+      if (!notFound) logErr(e);
+    });
+  }
+  function record(ev) {
+    if (busy || !cur) return;
+    busy = true;
+    $('btnIn').disabled = $('btnOut').disabled = true;
+    $('partMsg').className = 'msg'; $('partMsg').textContent = 'Đang ghi · 기록 중...';
+    api('event', { part_id: cur.part.part_id, process: proc.code, event: ev, worker: worker ? worker.name : '', memo: cur.how === 'list' ? 'LIST' : '' })
+      .then(function (j) {
+        busy = false; lastCode = cur.part.part_id; lastTime = Date.now();
+        $('doneWhat').textContent = proc.name_vi + ': ' + EVENT_TXT[ev];
+        $('doneCode').textContent = cur.part.part_id + '  (row ' + j.row + ')';
+        view('vDone');
+        backTimer = setTimeout(function () { toScan(true); }, 1500);
+      }).catch(function (e) {
+        busy = false;
+        $('btnIn').disabled = $('btnOut').disabled = false;
+        $('partMsg').className = 'msg ng';
+        $('partMsg').textContent = 'CHƯA GHI ĐƯỢC, bấm lại · 기록되지 않았습니다. 다시 누르십시오\n' + errText(e);
+        logErr(e);
+      });
+  }
+  $('btnIn').onclick = function () { record('IN'); };
+  $('btnOut').onclick = function () { record('OUT'); };
+  $('btnBack').onclick = function () { toScan(true); };
+
+  // ---------- list fallback: mold -> part ----------
+  function listFail(e) { $('listMsg').className = 'msg ng'; $('listMsg').textContent = 'Lỗi tải · 불러오기 실패: ' + errText(e); logErr(e); }
+  function listMolds() {
+    view('vList');
+    $('listTitle').innerHTML = 'Chọn khuôn<small>금형 선택</small>';
+    $('listBox').innerHTML = ''; $('listMsg').className = 'msg'; $('listMsg').textContent = 'Đang tải · 불러오는 중...';
+    api('masters').then(function (j) {
+      masters = j; $('listMsg').textContent = j.molds.length ? '' : 'Chưa có khuôn · 등록된 금형이 없습니다';
+      options($('listBox'), j.molds.map(function (m) { return { code: m.mold_id, product: m.product }; }), null,
+              function (m) { return esc(m.code) + '<small>' + esc(m.product) + '</small>'; }, function (m) { listParts(m.code); });
+    }).catch(listFail);
+  }
+  function listParts(moldId) {
+    $('listTitle').innerHTML = esc(moldId) + '<small>Chọn chi tiết · 부품 선택</small>';
+    $('listBox').innerHTML = ''; $('listMsg').textContent = 'Đang tải · 불러오는 중...';
+    api('parts', { mold_id: moldId }).then(function (j) {
+      $('listMsg').textContent = '';
+      var gc = j.parts.filter(function (p) { return p.kind !== 'TC'; }).map(function (p) { return { code: p.part_id, name: p.name }; });
+      options($('listBox'), gc, null, function (p) { return esc(String(p.code).slice(String(moldId).length)) + '<small>' + esc(p.name) + '</small>'; },
+              function (p) { view('vScan'); gotCode(p.code, 'list'); });
+    }).catch(listFail);
+  }
+  $('btnList').onclick = listMolds;
+  $('btnListBack').onclick = function () { toScan(false); };
+
+  // ---------- start ----------
+  $('selfcheck').textContent = 'Script OK · 프로그램 실행 중  input v' + VER + ' / ' + decoderName;
+  window.onerror = function (m, src, line) { $('selfcheck').textContent += '\nJS error: ' + m + ' @' + line; };
+  if (GAS_RE.test(GAS_URL) && proc && (!fixedProc || proc.code === fixedProc)) { drawBar(); toScan(false); }
+  else openSetup();
+</script>
+</body>
+</html>

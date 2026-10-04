@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>In phiếu di chuyển · 이동전표 출력</title>
+<!-- Mold Tracking - slip.html  v1.0 (2026-10-04)
+     v1.0: first version (stage 0). Pick a mold, print one travel slip per machined part (kind GC).
+           A4 portrait, 8 slips per sheet. QR 15 mm square, error correction M, white margin 4 mm on every side,
+           QR content = part code only, code also printed as text.
+     Host: GitHub Pages (same folder as register.html and input.html). -->
+<style>
+  :root { --ink: #1f2a24; --paper: #f4f5f3; --line: #c9cec9; --go: #2e7d5b; --alt: #3b6ea5; --stop: #8a8f8c; --ng: #c0392b; --soft: #6b736e; }
+  * { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Malgun Gothic", sans-serif;
+         margin: 0; padding: 16px; background: var(--paper); color: var(--ink); }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 4px 0 2px; }
+  h1 small, h2 small, button small { font-weight: 400; color: var(--soft); font-size: .8em; margin-left: 6px; }
+  button small { color: inherit; opacity: .85; }
+  nav { margin: 0 0 14px; font-size: 14px; } nav a { color: var(--alt); margin-right: 16px; }
+  .card { background: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+  .card h2 { font-size: 16px; margin: 0 0 10px; }
+  select { padding: 10px; font-size: 16px; border: 1px solid var(--line); border-radius: 8px; min-width: 280px; }
+  button { padding: 12px 18px; margin: 10px 8px 0 0; font-size: 16px; font-weight: 600; border: 0; border-radius: 10px; color: #fff; cursor: pointer; }
+  button:disabled { opacity: .4; cursor: default; }
+  button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid #f0b429; outline-offset: 2px; }
+  .go { background: var(--go); } .alt { background: var(--alt); } .stop { background: var(--stop); }
+  .msg { font-size: 14px; margin-top: 8px; white-space: pre-wrap; } .ok { color: var(--go); } .ng { color: var(--ng); }
+  .small { font-size: 12px; color: var(--soft); }
+  #pick { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: 13px; }
+  #pick label { font-family: Consolas, "Courier New", monospace; white-space: nowrap; }
+
+  /* ----- slips: sizes in mm so screen preview and print are the same ----- */
+  .page { width: 194mm; display: grid; grid-template-columns: 97mm 97mm; grid-auto-rows: 69mm; margin: 0 auto 8mm; background: #fff; }
+  .slip { border: 0.2mm dashed #999; padding: 3mm 4mm; overflow: hidden; display: flex; flex-direction: column; color: #000; }
+  .top { display: flex; align-items: flex-start; }
+  .qr { width: 23mm; height: 23mm; padding: 4mm; background: #fff; flex: none; margin: -1mm 2mm 0 -2mm; }
+  .qr img, .qr canvas { width: 15mm; height: 15mm; display: block; image-rendering: pixelated; }
+  .id { min-width: 0; }
+  .code { font-family: Consolas, "Courier New", monospace; font-weight: 700; font-size: 19pt; line-height: 1.05; letter-spacing: .3pt; word-break: break-all; }
+  .code span { color: #555; font-weight: 400; font-size: 12pt; display: block; }
+  .name { font-size: 11pt; font-weight: 700; margin-top: 1.5mm; line-height: 1.15; }
+  .namevi { font-size: 9.5pt; line-height: 1.15; }
+  .info { margin-top: auto; border-top: 0.2mm solid #000; font-size: 9pt; display: grid; grid-template-columns: 1fr 1fr; }
+  .info div { padding: 1mm 0; border-bottom: 0.2mm solid #bbb; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .info b { font-size: 10.5pt; }
+  .info .wide { grid-column: 1 / 3; }
+  .memo { height: 9mm; font-size: 8pt; color: #555; padding-top: 1mm; }
+  @page { size: A4 portrait; margin: 8mm; }
+  @media print {
+    body { background: #fff; padding: 0; }
+    .noprint { display: none !important; }
+    .page { margin: 0 auto; break-after: page; page-break-after: always; }
+    .page:last-child { break-after: auto; page-break-after: auto; }
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+<div class="wrap noprint">
+  <h1>In phiếu di chuyển <small>이동전표 출력</small></h1>
+  <nav><a href="register.html">Đăng ký · 등록</a><a href="slip.html">In phiếu · 이동전표 출력</a><a href="input.html">Quét nhập · 스캔 입력</a></nav>
+  <div class="card">
+    <h2>Chọn khuôn <small>금형 선택</small></h2>
+    <select id="mold"><option value="">...</option></select>
+    <button class="go" id="btnPrint" disabled>In · 인쇄</button>
+    <div class="msg" id="msg"></div>
+    <div class="small">Khi in: khổ A4, tỷ lệ 100%, lề "Mặc định" · 인쇄 창에서 A4, 배율 100%, 여백 "기본값"으로 두어야 QR이 15mm로 나옵니다.</div>
+    <div id="pick"></div>
+  </div>
+  <div class="card"><div class="small" id="selfcheck">Script chưa chạy · 프로그램 실행 안 됨</div></div>
+</div>
+<div id="pages"></div>
+
+<script>
+  var VER = '1.0', PAGE = 'slip';
+  var $ = function (id) { return document.getElementById(id); };
+  var GAS_RE = /^https:\/\/script\.google\.com\/.+\/exec$/;
+  var GAS_URL = '';
+  try { GAS_URL = localStorage.getItem('mt_gasUrl') || ''; } catch (e) {}
+  var mold = null, parts = [];
+
+  function api(action, data) {
+    var body = data || {};
+    body.action = action; body.device = navigator.userAgent;
+    if (!GAS_RE.test(GAS_URL)) return Promise.reject(new Error('NO_SHEET_ADDRESS'));
+    return fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (!j.ok) throw new Error(j.error); return j; });
+  }
+  function errText(e) { return (e && e.name && e.name !== 'Error' ? e.name + ': ' : '') + (e && e.message ? e.message : String(e)); }
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function fail(e) {
+    $('msg').className = 'msg ng';
+    $('msg').textContent = 'Lỗi · 오류: ' + errText(e) +
+      (errText(e) === 'NO_SHEET_ADDRESS' ? '\nNhập địa chỉ Sheet ở trang Đăng ký trước · 먼저 등록 화면에서 시트 주소를 저장하십시오' : '');
+    if (errText(e) !== 'NO_SHEET_ADDRESS') api('logError', { page: PAGE, error: errText(e) }).catch(function () {});
+  }
+
+  function draw() {
+    var chosen = parts.filter(function (p, i) { return $('ck' + i).checked; });
+    var box = $('pages'); box.innerHTML = '';
+    var page = null;
+    chosen.forEach(function (p, n) {
+      if (n % 8 === 0) { page = document.createElement('div'); page.className = 'page'; box.appendChild(page); }
+      var id = String(p.part_id), mid = String(p.mold_id);
+      var s = document.createElement('div'); s.className = 'slip';
+      s.innerHTML =
+        '<div class="top"><div class="qr"></div><div class="id">' +
+          '<div class="code"><span>' + esc(mid) + '</span>' + esc(id.indexOf(mid) === 0 ? id.slice(mid.length) : id) + '</div>' +
+          '<div class="name">' + esc(p.name) + '</div><div class="namevi">' + esc(p.name_vi) + '</div></div></div>' +
+        '<div class="info">' +
+          '<div class="wide">Mã · 코드 <b>' + esc(id) + '</b></div>' +
+          '<div>Vật liệu · 재질 <b>' + esc(p.material) + '</b></div>' +
+          '<div>SL · 수량 <b>' + esc(p.qty) + '</b></div>' +
+          '<div class="wide">Sản phẩm · 제품 <b>' + esc(mold ? mold.product : '') + '</b></div>' +
+          '<div>Hạn · 납기 <b>' + esc(mold ? mold.due_date : '') + '</b></div>' +
+          '<div>' + (p.source === 'TN' ? '<b>Thuê ngoài · 외주</b>' : 'Nội bộ · 사내') + '</div>' +
+        '</div><div class="memo">Ghi chú · 비고</div>';
+      page.appendChild(s);
+      new QRCode(s.querySelector('.qr'), { text: id, width: 300, height: 300, correctLevel: QRCode.CorrectLevel.M });
+    });
+    $('btnPrint').disabled = !chosen.length;
+    $('msg').className = 'msg ok';
+    $('msg').textContent = 'Phiếu · 전표 ' + chosen.length + ' / Trang A4 · A4 ' + Math.ceil(chosen.length / 8) + ' trang · 장';
+  }
+
+  function load(moldId) {
+    $('pages').innerHTML = ''; $('pick').innerHTML = ''; $('btnPrint').disabled = true;
+    if (!moldId) return;
+    $('msg').className = 'msg'; $('msg').textContent = 'Đang tải · 불러오는 중...';
+    api('parts', { mold_id: moldId }).then(function (j) {
+      mold = j.mold;
+      parts = j.parts.filter(function (p) { return p.kind !== 'TC'; });      // standard parts get no slip
+      if (!parts.length) { $('msg').className = 'msg ng'; $('msg').textContent = 'Không có chi tiết gia công · 가공 부품이 없습니다'; return; }
+      $('pick').innerHTML = parts.map(function (p, i) {
+        return '<label><input type="checkbox" id="ck' + i + '" checked> ' + esc(p.part_id) + '</label>';
+      }).join('');
+      parts.forEach(function (p, i) { $('ck' + i).onchange = draw; });
+      draw();
+    }).catch(fail);
+  }
+
+  $('mold').onchange = function () { load(this.value); };
+  $('btnPrint').onclick = function () { window.print(); };
+
+  $('selfcheck').textContent = 'Script OK · 프로그램 실행 중  slip v' + VER + ' / QR lib: ' + (typeof QRCode === 'function' ? 'OK' : 'MISSING');
+  api('masters').then(function (j) {
+    var want = (location.search.match(/[?&]mold=([^&]+)/) || [])[1] || '';
+    $('mold').innerHTML = '<option value="">Chọn khuôn · 금형 선택</option>' + j.molds.map(function (m) {
+      return '<option value="' + esc(m.mold_id) + '">' + esc(m.mold_id) + '  ' + esc(m.product) + '</option>';
+    }).join('');
+    if (want) { $('mold').value = decodeURIComponent(want); load($('mold').value); }
+  }).catch(fail);
+</script>
+</body>
+</html>
