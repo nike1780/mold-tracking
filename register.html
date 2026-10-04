@@ -3,243 +3,154 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Đăng ký danh sách chi tiết · 부품 리스트 등록</title>
-<!-- Mold Tracking - register.html  v1.0 (2026-10-04)
-     v1.0: first version (stage 0). Paste a part list copied from Excel, check it, register it to the sheet.
-           Also keeps the /exec address and shows the phone setup QR.
-     Host: GitHub Pages (same folder as slip.html and input.html). Data goes to MoldTracking_AppsScript.gs (doPost). -->
+<title>Đăng ký danh sách chi tiết · 부품 리스트 등록 — MoldTracking</title>
+<!-- MoldTracking part list registration page v0.1 (2026-10-04)
+     v0.1: first version. Paste rows copied from the Excel part list (PartList_Template),
+           check them on screen, then register them to the Parts sheet.
+     Column order of the pasted rows: PART NO | PART NAME | TYPE (M/S) | QTY | MATERIAL | SPEC | NOTE
+     Host on GitHub Pages together with mt-common.js and mt-common.css. -->
+<link rel="stylesheet" href="mt-common.css">
+<script src="mt-common.js"></script>
 <style>
-  :root { --ink: #1f2a24; --paper: #f4f5f3; --line: #c9cec9; --go: #2e7d5b; --alt: #3b6ea5; --stop: #8a8f8c; --ng: #c0392b; --soft: #6b736e; }
-  * { box-sizing: border-box; }
-  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Malgun Gothic", sans-serif;
-         margin: 0; padding: 16px; background: var(--paper); color: var(--ink); max-width: 1100px; margin: 0 auto; }
-  h1 { font-size: 22px; margin: 4px 0 2px; }
-  h1 small, h2 small, button small, label small, th small { font-weight: 400; color: var(--soft); font-size: .8em; margin-left: 6px; }
-  button small { color: inherit; opacity: .85; }
-  nav { margin: 0 0 14px; font-size: 14px; }
-  nav a { color: var(--alt); margin-right: 16px; }
-  .card { background: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
-  .card h2 { font-size: 16px; margin: 0 0 10px; }
-  label { display: block; font-size: 13px; margin: 8px 0 4px; }
-  input[type=text], input[type=date], textarea { width: 100%; padding: 10px; font-size: 15px; border: 1px solid var(--line);
-         border-radius: 8px; font-family: inherit; }
-  textarea { height: 150px; font-family: Consolas, "Courier New", monospace; font-size: 13px; white-space: pre; }
-  button { padding: 12px 18px; margin: 10px 8px 0 0; font-size: 16px; font-weight: 600; border: 0; border-radius: 10px;
-           color: #fff; cursor: pointer; }
-  button:disabled { opacity: .4; cursor: default; }
-  button:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible { outline: 3px solid #f0b429; outline-offset: 2px; }
-  .go { background: var(--go); } .alt { background: var(--alt); } .stop { background: var(--stop); }
-  .row { display: flex; gap: 12px; flex-wrap: wrap; } .row > div { flex: 1 1 200px; }
-  .msg { font-size: 14px; margin-top: 8px; white-space: pre-wrap; }
-  .ok { color: var(--go); } .ng { color: var(--ng); }
-  .small { font-size: 12px; color: var(--soft); word-break: break-all; }
-  table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 10px; }
-  th, td { border-bottom: 1px solid #e3e6e3; padding: 5px 6px; text-align: left; vertical-align: top; }
-  th { background: #eef0ee; position: sticky; top: 0; }
-  tr.bad td { background: #fbeae8; }
-  td.code { font-family: Consolas, "Courier New", monospace; font-weight: 700; }
-  .scroll { max-height: 420px; overflow: auto; }
-  #phoneQr img, #phoneQr canvas { width: 200px; height: 200px; }
-  #phoneBox { display: none; margin-top: 12px; }
+  td.type button { width: auto; display: inline-block; margin: 0; padding: 4px 12px; font-size: 13px; }
+  .sum { font-size: 16px; font-weight: 700; margin: 8px 0; }
 </style>
-<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </head>
 <body>
-<h1>Đăng ký danh sách chi tiết <small>부품 리스트 등록</small></h1>
-<nav><a href="register.html">Đăng ký · 등록</a><a href="slip.html">In phiếu · 이동전표 출력</a><a href="input.html">Quét nhập · 스캔 입력</a></nav>
+<div class="wrap wide">
+<h1>Đăng ký danh sách chi tiết <small>부품 리스트 등록 (사무실용)</small></h1>
+<div id="err"></div>
+<div id="noaddr">Chưa có địa chỉ Sheet · 시트 주소가 없습니다. <a href="setup.html">Cài đặt · 설정</a></div>
 
 <div class="card">
-  <h2>1. Địa chỉ Sheet <small>시트 주소 (처음 한 번)</small></h2>
-  <input type="text" id="gasUrl" placeholder="https://script.google.com/macros/s/.../exec">
-  <button class="alt" id="btnGas">Lưu và kiểm tra <small>저장하고 확인</small></button>
-  <div class="msg" id="gasMsg"></div>
-  <div id="phoneBox">
-    <div class="small">Điện thoại: mở camera, quét mã này một lần để cài đặt · 작업자 폰은 기본 카메라로 이 QR을 한 번 읽으면 설정됩니다 (주소를 손으로 입력하지 않음)</div>
-    <div id="phoneQr"></div>
-    <div class="small" id="phoneUrl"></div>
+  <h2>1. Khuôn <small>금형</small></h2>
+  <div class="row2">
+    <div><label for="moldNo">Số khuôn · 금형번호 (예: HM26015)</label><input type="text" id="moldNo" autocomplete="off" maxlength="12"></div>
+    <div><label for="due">Hạn giao · 납기</label><input type="date" id="due"></div>
+    <div><label for="customer">Khách hàng · 고객</label><input type="text" id="customer" autocomplete="off"></div>
+    <div><label for="product">Tên sản phẩm · 제품명</label><input type="text" id="product" autocomplete="off"></div>
   </div>
+  <div class="msg warn" id="moldMsg"></div>
 </div>
 
 <div class="card">
-  <h2>2. Thông tin khuôn <small>금형 정보</small></h2>
-  <div class="row">
-    <div><label>Khách hàng <small>고객</small></label><input type="text" id="customer"></div>
-    <div><label>Tên sản phẩm <small>제품명</small></label><input type="text" id="product"></div>
-    <div><label>Hạn giao <small>납기</small></label><input type="date" id="due"></div>
-    <div><label>Mã khuôn, chỉ khi Part No là mã ngắn <small>부품번호가 짧은 형식(NA101)일 때만</small></label>
-         <input type="text" id="prefix" placeholder="HM26015"></div>
-  </div>
+  <h2>2. Dán danh sách từ Excel <small>엑셀 부품표 붙여 넣기</small></h2>
+  <div class="small">Thứ tự cột · 열 순서: PART NO | PART NAME | TYPE (M = gia công 가공, S = tiêu chuẩn 표준품) | QTY | MATERIAL | SPEC | NOTE
+    — <a href="PartList_Template_v0_1.xlsx">Tải mẫu Excel · 양식 내려받기</a></div>
+  <textarea id="paste" placeholder="B01&#9;TOP CLAMPING PLATE&#9;M&#9;1&#9;S50C" spellcheck="false"></textarea>
 </div>
 
 <div class="card">
-  <h2>3. Dán danh sách từ Excel <small>엑셀에서 복사해 붙여 넣기 (제목 줄 포함)</small></h2>
-  <textarea id="paste" placeholder="PART NO	PART NAME	TÊN TIẾNG VIỆT	LOẠI	VẬT LIỆU	SỐ LƯỢNG	NGUỒN	MÃ ĐẶT HÀNG	GHI CHÚ"></textarea>
-  <button class="alt" id="btnCheck">Kiểm tra <small>확인</small></button>
-  <button class="go" id="btnReg" disabled>Đăng ký vào Sheet <small>시트에 등록</small></button>
-  <div class="msg" id="sum"></div>
-  <div class="scroll"><table id="tbl"></table></div>
+  <h2>3. Kiểm tra <small>확인</small></h2>
+  <div class="sum" id="sum">Chưa có dữ liệu · 붙여 넣은 내용 없음</div>
+  <button class="b-sub" id="btnAllM" style="display:none">Ô TYPE trống → M<small>구분이 빈 줄을 모두 가공(M)으로</small></button>
+  <div class="tablebox"><table class="grid" id="tbl"></table></div>
+  <button class="b-in" id="btnReg" disabled>Đăng ký<small>등록</small></button>
   <div class="msg" id="regMsg"></div>
+  <a class="btn b-out" id="toTicket" style="display:none">In phiếu di chuyển<small>이동전표 출력으로</small></a>
 </div>
 
 <div class="card"><div class="small" id="selfcheck">Script chưa chạy · 프로그램 실행 안 됨</div></div>
+</div>
 
 <script>
-  var VER = '1.0', PAGE = 'register';
-  var $ = function (id) { return document.getElementById(id); };
-  var GAS_RE = /^https:\/\/script\.google\.com\/.+\/exec$/;
-  var MOLD_RE = /^H(R)?[MPD][0-9]{5}/, ID_RE = /^H(R)?[MPD][0-9]{5}[A-Z0-9]{1,11}$/;
-  var GAS_URL = '';
-  try { GAS_URL = localStorage.getItem('mt_gasUrl') || ''; } catch (e) {}
-  var rows = [], moldId = '';
+(function () {
+  var $ = MT.$, esc = MT.esc, rows = [];
+  MT.init('register', 'v0.1');
+  var MOLD_STD = /^(HM|HP|HD|HRM|HRP|HRD)\d{5}$/;      // H-1.3.3 standard: type + year(2) + serial(3)
+  var TYPE_M = ['M', 'G', 'GC', 'GIA CÔNG', 'GIA CONG', '가공'];
+  var TYPE_S = ['S', 'TC', 'STD', 'TIÊU CHUẨN', 'TIEU CHUAN', '표준', '표준품'];
 
-  function api(action, data) {
-    var body = data || {};
-    body.action = action; body.device = navigator.userAgent;
-    if (!GAS_RE.test(GAS_URL)) return Promise.reject(new Error('NO_SHEET_ADDRESS'));
-    return fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
-      .then(function (r) { return r.json(); })
-      .then(function (j) { if (!j.ok) throw new Error(j.error); return j; });
-  }
-  function errText(e) { return (e && e.name && e.name !== 'Error' ? e.name + ': ' : '') + (e && e.message ? e.message : String(e)); }
-  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function up(s) { return String(s || '').toUpperCase().trim(); }
+  function moldNo() { return up($('moldNo').value).replace(/\s+/g, ''); }
+  function normType(t) { t = up(t); return TYPE_M.indexOf(t) >= 0 ? 'M' : TYPE_S.indexOf(t) >= 0 ? 'S' : ''; }
 
-  // ----- sheet address -----
-  function showPhoneQr() {
-    var url = location.origin + location.pathname.replace(/[^\/]*$/, '') + 'input.html#gas=' + encodeURIComponent(GAS_URL);
-    $('phoneQr').innerHTML = '';
-    if (typeof QRCode === 'function') new QRCode($('phoneQr'), { text: url, width: 400, height: 400, correctLevel: QRCode.CorrectLevel.L });
-    $('phoneUrl').textContent = url;
-    $('phoneBox').style.display = 'block';
-  }
-  function checkGas() {
-    $('gasMsg').className = 'msg'; $('gasMsg').textContent = 'Đang kiểm tra · 확인 중...';
-    api('ping').then(function (j) {
-      $('gasMsg').className = 'msg ok';
-      $('gasMsg').textContent = 'Đã kết nối · 연결됨: "' + j.sheet + '" (API v' + j.version + ', ' + j.time + ')';
-      showPhoneQr();
-    }).catch(function (e) {
-      $('gasMsg').className = 'msg ng';
-      $('gasMsg').textContent = 'Không kết nối được · 연결 실패: ' + errText(e) +
-        (GAS_RE.test(GAS_URL) ? '' : '\nĐịa chỉ phải kết thúc bằng /exec · 주소는 /exec 로 끝나야 합니다');
-      $('phoneBox').style.display = 'none';
+  // Text copied from Excel: one row per line, cells separated by tabs.
+  function parse(text) {
+    var out = [];
+    String(text || '').split(/\r?\n/).forEach(function (line) {
+      if (!line.trim()) return;
+      var c = line.split('\t').map(function (s) { return s.trim().replace(/^"|"$/g, ''); });
+      var a = c[0] || '', name = c[1] || '';
+      if (/PART|MÃ|코드|부품/i.test(a)) return;                      // header row
+      if (!name && a.indexOf('-') > 0) { name = a.substring(a.indexOf('-') + 1).trim(); a = a.substring(0, a.indexOf('-')); }
+      out.push({ partNo: up(a).replace(/\s+/g, ''), name: name, type: normType(c[2]), qtyText: c[3] || '',
+                 material: c[4] || '', spec: c[5] || '', note: c[6] || '' });
     });
-  }
-  $('gasUrl').value = GAS_URL;
-  $('btnGas').onclick = function () {
-    GAS_URL = $('gasUrl').value.trim();
-    try { localStorage.setItem('mt_gasUrl', GAS_URL); } catch (e) {}
-    checkGas();
-  };
-
-  // ----- paste parsing -----
-  // Tab separated text from Excel. Cells that contain line breaks arrive inside double quotes.
-  function parseTsv(text) {
-    var out = [], row = [], cell = '', q = false, i = 0, c;
-    text = text.replace(/\r\n?/g, '\n');
-    while (i < text.length) {
-      c = text[i];
-      if (q) {
-        if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
-        else if (c === '"') q = false;
-        else cell += c;
-      } else if (c === '"' && cell === '') q = true;
-      else if (c === '\t') { row.push(cell); cell = ''; }
-      else if (c === '\n') { row.push(cell); out.push(row); row = []; cell = ''; }
-      else cell += c;
-      i++;
-    }
-    if (cell !== '' || row.length) { row.push(cell); out.push(row); }
     return out;
   }
-  var COLS = [                                   // order matters: name_vi before name, order before id
-    ['name_vi', /TIẾNG VIỆT/], ['order_code', /ĐẶT HÀNG|ORDER/], ['id', /PART\s*NO|MÃ CHI TIẾT/], ['name', /PART\s*NAME|TÊN CHI TIẾT/],
-    ['kind', /LOẠI|KIND/], ['material', /VẬT LIỆU|MATERIAL/], ['qty', /SỐ LƯỢNG|QTY|Q'TY/], ['source', /NGUỒN|SOURCE/], ['note', /GHI CHÚ|NOTE/]
-  ];
-  var DEFAULT_ORDER = ['id', 'name', 'name_vi', 'kind', 'material', 'qty', 'source', 'order_code', 'note'];
 
-  function check() {
-    var grid = parseTsv($('paste').value), map = null, start = 0, r, c;
-    for (r = 0; r < grid.length && !map; r++) {
-      if (grid[r].some(function (x) { return /PART\s*NO|MÃ CHI TIẾT/i.test(x); })) {
-        map = {};
-        grid[r].forEach(function (h, ci) {
-          var H = h.normalize('NFC').toUpperCase().replace(/\s+/g, ' ');
-          for (c = 0; c < COLS.length; c++) if (COLS[c][1].test(H) && map[COLS[c][0]] === undefined) { map[COLS[c][0]] = ci; break; }
-        });
-        start = r + 1;
-      }
-    }
-    if (!map) { map = {}; DEFAULT_ORDER.forEach(function (k, ci) { map[k] = ci; }); }
-    var get = function (line, k) { return map[k] === undefined ? '' : String(line[map[k]] || '').replace(/\s+/g, ' ').trim(); };
-    var prefix = $('prefix').value.toUpperCase().replace(/\s/g, '');
-    rows = []; moldId = '';
-    var seen = {}, nErr = 0, nGc = 0, nTc = 0;
-    for (r = start; r < grid.length; r++) {
-      var raw = get(grid[r], 'id');
-      if (!raw) continue;
-      var p = { name: get(grid[r], 'name'), name_vi: get(grid[r], 'name_vi'), material: get(grid[r], 'material'),
-                order_code: get(grid[r], 'order_code'), note: get(grid[r], 'note'), err: '' };
-      var id = raw.toUpperCase(), cut = id.indexOf('-');
-      if (cut > 0 && !/^H(R)?[MPD][0-9]{5}$/.test(id.slice(0, cut))) { if (!p.name) p.name = raw.slice(cut + 1).trim(); id = id.slice(0, cut); }   // "HM26002B01-TOP CLAMPING PLATE"
-      id = id.replace(/\s/g, '');
-      if (!MOLD_RE.test(id) && prefix) id = prefix + id;
-      p.part_id = id;
-      var kind = get(grid[r], 'kind').toUpperCase(), src = get(grid[r], 'source').toUpperCase();
-      p.kind = kind ? (/^T|표준/.test(kind) ? 'TC' : 'GC') : (p.order_code ? 'TC' : 'GC');
-      p.source = /TN|THUÊ|외주/.test(src) ? 'TN' : 'NB';
-      p.qty = parseInt(get(grid[r], 'qty'), 10) || 1;
-      var m = id.match(MOLD_RE);
-      if (!ID_RE.test(id)) p.err = 'Mã sai dạng · 코드 형식 오류';
-      else if (id.length >= 20) p.err = 'Dài quá 19 ký tự · 20자 이상';
-      else if (seen[id]) p.err = 'Trùng mã · 코드 중복';
-      else if (moldId && m[0] !== moldId) p.err = 'Khác mã khuôn · 금형번호가 다름 (' + moldId + ')';
-      else if (p.kind === 'GC' && p.qty !== 1) p.err = 'Chi tiết gia công phải là 1 cái mỗi mã · 가공 부품은 코드당 1개';
-      if (m && !moldId) moldId = m[0];
-      seen[id] = true;
-      if (p.err) nErr++; else if (p.kind === 'GC') nGc++; else nTc++;
-      rows.push(p);
-    }
-    var h = '<tr><th>Part No</th><th>Tên · 부품명</th><th>Tiếng Việt</th><th>Loại · 구분</th><th>Vật liệu · 재질</th>' +
-            '<th>SL · 수량</th><th>Nguồn · 사내/외주</th><th>Mã đặt hàng · 발주</th><th>Kết quả · 결과</th></tr>';
-    rows.forEach(function (p) {
-      h += '<tr' + (p.err ? ' class="bad"' : '') + '><td class="code">' + esc(p.part_id) + '</td><td>' + esc(p.name) + '</td><td>' +
-           esc(p.name_vi) + '</td><td>' + p.kind + '</td><td>' + esc(p.material) + '</td><td>' + p.qty + '</td><td>' + p.source +
-           '</td><td>' + esc(p.order_code) + '</td><td class="' + (p.err ? 'ng' : 'ok') + '">' + (p.err || 'OK') + '</td></tr>';
+  function validate() {
+    var m = moldNo(), seen = {}, nM = 0, nS = 0, nBad = 0, blank = 0;
+    rows.forEach(function (r) {
+      var e = [];
+      r.partId = (m && r.partNo.indexOf(m) === 0) ? r.partNo : m + r.partNo;
+      r.qty = r.qtyText === '' ? 1 : Number(r.qtyText);
+      if (!r.partNo || r.partId === m) e.push('Thiếu mã · 코드 없음');
+      else if (r.partId.length >= 20) e.push('Mã ≥ 20 ký tự · 20자 이상');
+      else if (!MT.ID_RE.test(r.partId)) e.push('Mã chỉ gồm A-Z, 0-9 · 대문자와 숫자만');
+      if (seen[r.partId]) e.push('Trùng mã · 코드 중복');
+      seen[r.partId] = true;
+      if (!r.type) { e.push('Thiếu TYPE · 구분 없음'); blank++; }
+      if (!(r.qty >= 1) || Math.floor(r.qty) !== r.qty) e.push('QTY sai · 수량 오류');
+      else if (r.type === 'M' && r.qty !== 1) e.push('Gia công: QTY phải là 1 · 가공 부품은 낱개마다 코드 1개');
+      r.err = e;
+      if (e.length) nBad++; else if (r.type === 'M') nM++; else nS++;
+    });
+    return { m: nM, s: nS, bad: nBad, blank: blank };
+  }
+
+  function render() {
+    var m = moldNo(), v = validate(), moldOk = MT.ID_RE.test(m) && m.length <= 12;
+    $('moldMsg').textContent = !m ? '' : !moldOk ? 'Số khuôn sai · 금형번호 형식 오류 (A-Z, 0-9)'
+      : !MOLD_STD.test(m) ? 'Khác tiêu chuẩn H-1.3.3 (HM/HP/HD/HRM/HRP/HRD + 5 số) · 표준 형식과 다릅니다. 맞으면 그대로 진행.' : '';
+    $('sum').textContent = rows.length
+      ? 'Gia công · 가공 ' + v.m + '   Tiêu chuẩn · 표준품 ' + v.s + '   Lỗi · 오류 ' + v.bad
+      : 'Chưa có dữ liệu · 붙여 넣은 내용 없음';
+    $('sum').className = 'sum ' + (v.bad ? 'ng' : rows.length ? 'ok' : '');
+    $('btnAllM').style.display = v.blank ? 'block' : 'none';
+    var h = '<tr><th>#</th><th>Part ID</th><th>Part name</th><th>Type</th><th>Qty</th><th>Material</th><th>Spec</th><th>Note</th><th>Lỗi · 오류</th></tr>';
+    rows.forEach(function (r, i) {
+      h += '<tr' + (r.err.length ? ' class="bad"' : '') + '><td>' + (i + 1) + '</td><td class="code">' + esc(r.partId) +
+        '</td><td>' + esc(r.name) + '</td><td class="type"><button type="button" class="' + (r.type === 'S' ? 'b-out' : r.type === 'M' ? 'b-in' : 'b-sub') +
+        '" data-i="' + i + '">' + (r.type || '?') + '</button></td><td>' + esc(r.qtyText === '' ? 1 : r.qtyText) + '</td><td>' + esc(r.material) +
+        '</td><td>' + esc(r.spec) + '</td><td>' + esc(r.note) + '</td><td>' + esc(r.err.join(' / ')) + '</td></tr>';
     });
     $('tbl').innerHTML = rows.length ? h : '';
-    $('sum').className = 'msg ' + (nErr || !rows.length ? 'ng' : 'ok');
-    $('sum').textContent = rows.length
-      ? 'Khuôn · 금형: ' + (moldId || '?') + '   |   Gia công · 가공 ' + nGc + '   |   Tiêu chuẩn · 표준품 ' + nTc + '   |   Lỗi · 오류 ' + nErr +
-        (nErr ? '\nSửa trong Excel rồi dán lại · 엑셀에서 고친 뒤 다시 붙여 넣으십시오' : '')
-      : 'Không có dòng nào · 읽은 줄이 없습니다';
-    $('btnReg').disabled = !(rows.length && !nErr);
-    $('regMsg').textContent = '';
+    $('btnReg').disabled = !(rows.length && !v.bad && moldOk && MT.hasGas());
   }
-  $('btnCheck').onclick = check;
-  $('paste').oninput = function () { $('btnReg').disabled = true; };
+
+  $('paste').addEventListener('input', function () { rows = parse(this.value); $('regMsg').textContent = ''; render(); });
+  $('moldNo').addEventListener('input', render);
+  $('tbl').addEventListener('click', function (ev) {          // tap the Type cell: M <-> S
+    var b = ev.target.closest ? ev.target.closest('button[data-i]') : null;
+    if (!b) return;
+    var r = rows[Number(b.getAttribute('data-i'))];
+    r.type = r.type === 'M' ? 'S' : 'M';
+    render();
+  });
+  $('btnAllM').onclick = function () { rows.forEach(function (r) { if (!r.type) r.type = 'M'; }); render(); };
 
   $('btnReg').onclick = function () {
-    $('btnReg').disabled = true;
-    $('regMsg').className = 'msg'; $('regMsg').textContent = 'Đang đăng ký · 등록 중...';
-    var list = rows.map(function (p) {
-      return { part_id: p.part_id, name: p.name, name_vi: p.name_vi, kind: p.kind, material: p.material, qty: p.qty,
-               source: p.source, order_code: p.order_code, note: p.note };
-    });
-    api('register', { mold: { mold_id: moldId, customer: $('customer').value.trim(), product: $('product').value.trim(), due_date: $('due').value }, parts: list })
-      .then(function (j) {
-        $('regMsg').className = 'msg ok';
-        $('regMsg').innerHTML = 'Đã đăng ký · 등록 완료: ' + esc(j.mold_id) + ' (mới · 신규 ' + j.added + ', cập nhật · 수정 ' + j.updated + ')  ' +
-          '<a href="slip.html?mold=' + encodeURIComponent(j.mold_id) + '">In phiếu · 이동전표 출력</a>';
-      }).catch(function (e) {
-        $('regMsg').className = 'msg ng';
-        $('regMsg').textContent = 'Đăng ký lỗi · 등록 실패: ' + errText(e);
-        $('btnReg').disabled = false;
-        api('logError', { page: PAGE, error: errText(e) }).catch(function () {});
-      });
+    MT.clearError();
+    var b = this, m = moldNo();
+    b.disabled = true;
+    $('regMsg').className = 'msg'; $('regMsg').textContent = 'Đang gửi · 보내는 중...';
+    MT.api('registerParts', {
+      mold: { moldNo: m, customer: $('customer').value, product: $('product').value, due: $('due').value },
+      parts: rows.map(function (r) {
+        return { partId: r.partId, name: r.name, type: r.type, qty: r.qty, material: r.material, spec: r.spec, note: r.note };
+      })
+    }).then(function (j) {
+      $('regMsg').className = 'msg ok';
+      $('regMsg').textContent = 'Đã đăng ký · 등록 완료 — ' + j.moldNo + ': thêm · 추가 ' + j.added + ', sửa · 수정 ' + j.updated;
+      $('toTicket').href = 'ticket.html?mold=' + encodeURIComponent(j.moldNo);
+      $('toTicket').style.display = 'block';
+    }).catch(function (e) { $('regMsg').textContent = ''; MT.showError('register', e); })
+      .then(function () { b.disabled = false; });
   };
-
-  $('selfcheck').textContent = 'Script OK · 프로그램 실행 중  register v' + VER + ' / QR lib: ' + (typeof QRCode === 'function' ? 'OK' : 'MISSING');
-  if (GAS_URL) checkGas();
+  render();
+})();
 </script>
 </body>
 </html>

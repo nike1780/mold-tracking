@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>In phiếu di chuyển · 이동전표 출력 — MoldTracking</title>
+<!-- MoldTracking move ticket print page v0.1 (2026-10-04)
+     v0.1: first version. Choose a mold -> one ticket per machined part, 8 tickets per A4 sheet.
+           QR: 15 mm square, error correction M, 3 mm white margin on every side, code printed beside it.
+           QR content: the part code only.
+     Print at 100 % scale (no "fit to page"), otherwise the QR is not 15 mm.
+     Host on GitHub Pages together with mt-common.js and mt-common.css. -->
+<link rel="stylesheet" href="mt-common.css">
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="mt-common.js"></script>
+<style>
+  @page { size: A4 portrait; margin: 8mm; }
+  #sheets { overflow-x: auto; }
+  .page { width: 194mm; display: grid; grid-template-columns: 97mm 97mm; grid-auto-rows: 68mm;
+    background: #fff; margin: 0 auto 6mm; break-after: page; page-break-after: always; }
+  .page:last-child { break-after: auto; page-break-after: auto; margin-bottom: 0; }
+  .ticket { border: 0.2mm dashed #777; padding: 3mm 4mm; overflow: hidden; color: #000; font-size: 9pt; line-height: 1.25; }
+  .top { display: grid; grid-template-columns: 21mm 1fr; column-gap: 3mm; align-items: center; }
+  .qr { width: 21mm; height: 21mm; padding: 3mm; background: #fff; }          /* 15 mm code + 3 mm quiet zone */
+  .qr img, .qr canvas { width: 15mm; height: 15mm; image-rendering: pixelated; }
+  .pid { font-family: "Courier New", Consolas, monospace; font-weight: 700; font-size: 14pt; white-space: nowrap; }
+  .pname { font-size: 11pt; font-weight: 700; margin-top: 1mm; }
+  .info { margin-top: 2mm; border-top: 0.2mm solid #000; padding-top: 1.5mm; display: grid;
+    grid-template-columns: 1fr 1fr; column-gap: 3mm; row-gap: 1mm; }
+  .info div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .info .full { grid-column: 1 / 3; }
+  .info b { font-weight: 400; color: #444; font-size: 7.5pt; margin-right: 1.5mm; }
+  .info span { font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="wrap wide">
+<div class="noprint">
+  <h1>In phiếu di chuyển <small>이동전표 출력</small></h1>
+  <div id="err"></div>
+  <div id="noaddr">Chưa có địa chỉ Sheet · 시트 주소가 없습니다. <a href="setup.html">Cài đặt · 설정</a></div>
+  <div class="card">
+    <label for="mold">Chọn khuôn · 금형 선택</label>
+    <select id="mold"><option value="">Đang tải · 불러오는 중...</option></select>
+    <button class="b-in" id="btnMake" disabled>Tạo phiếu<small>전표 만들기</small></button>
+    <div class="msg" id="info"></div>
+    <button class="b-out" id="btnPrint" style="display:none">In<small>인쇄 — 배율 100 %, "용지에 맞춤" 끄기</small></button>
+  </div>
+</div>
+<div id="sheets"></div>
+<div class="card noprint"><div class="small" id="selfcheck">Script chưa chạy · 프로그램 실행 안 됨</div></div>
+</div>
+
+<script>
+(function () {
+  var $ = MT.$, esc = MT.esc, PER_PAGE = 8;
+  MT.init('ticket', 'v0.1', 'QR lib: ' + (typeof QRCode === 'function' ? 'OK' : 'MISSING'));
+
+  function natural(a, b) { return a.partId.localeCompare(b.partId, 'en', { numeric: true }); }   // ...9, 10, 11
+
+  function ticketHtml(p, mold) {
+    return '<div class="ticket"><div class="top"><div class="qr" data-code="' + esc(p.partId) + '"></div><div>' +
+      '<div class="pid">' + esc(p.partId) + '</div><div class="pname">' + esc(p.name) + '</div></div></div>' +
+      '<div class="info">' +
+      '<div><b>Khuôn · 금형</b><span>' + esc(p.moldNo) + '</span></div>' +
+      '<div><b>Hạn giao · 납기</b><span>' + esc(mold.due) + '</span></div>' +
+      '<div class="full"><b>Sản phẩm · 제품</b><span>' + esc(mold.product) + '</span></div>' +
+      '<div><b>Vật liệu · 재질</b><span>' + esc(p.material) + '</span></div>' +
+      '<div><b>SL · 수량</b><span>' + esc(p.qty) + '</span></div>' +
+      '<div class="full"><b>Quy cách · 규격</b><span>' + esc(p.spec) + '</span></div>' +
+      '<div class="full"><b>Ghi chú · 비고</b><span>' + esc(p.note) + '</span></div>' +
+      '</div></div>';
+  }
+
+  function build(j) {
+    var parts = j.parts.filter(function (p) { return p.type === 'M'; }).sort(natural), html = '';
+    for (var i = 0; i < parts.length; i += PER_PAGE) {
+      html += '<div class="page">' + parts.slice(i, i + PER_PAGE).map(function (p) { return ticketHtml(p, j.mold); }).join('') + '</div>';
+    }
+    $('sheets').innerHTML = html;
+    if (typeof QRCode !== 'function') throw MT.named('QrLibMissing', 'Không tải được thư viện QR · QR 라이브러리를 불러오지 못함');
+    Array.prototype.forEach.call(document.querySelectorAll('.qr'), function (el) {
+      // 525 px = 21 x 25 = 25 x 21: whole pixels per cell for both QR sizes used by codes under 20 characters.
+      new QRCode(el, { text: el.getAttribute('data-code'), width: 525, height: 525, correctLevel: QRCode.CorrectLevel.M });
+    });
+    var std = j.parts.length - parts.length;
+    $('info').className = 'msg ' + (parts.length ? 'ok' : 'warn');
+    $('info').textContent = parts.length
+      ? 'Gia công · 가공 부품 ' + parts.length + ' → A4 ' + Math.ceil(parts.length / PER_PAGE) + ' tờ · 장' +
+        (std ? '\n(Tiêu chuẩn · 표준품 ' + std + ' loại: không in phiếu · 전표 없음)' : '')
+      : 'Không có chi tiết gia công · 가공 부품이 없습니다.';
+    $('btnPrint').style.display = parts.length ? 'block' : 'none';
+  }
+
+  $('btnMake').onclick = function () {
+    MT.clearError();
+    var b = this, m = $('mold').value;
+    if (!m) return;
+    b.disabled = true;
+    $('info').className = 'msg'; $('info').textContent = 'Đang tải · 불러오는 중...';
+    MT.api('listParts', { moldNo: m }).then(build)
+      .catch(function (e) { $('info').textContent = ''; MT.showError('ticket', e); })
+      .then(function () { b.disabled = false; });
+  };
+  $('btnPrint').onclick = function () { window.print(); };
+  $('mold').onchange = function () { $('btnMake').disabled = !this.value; };
+
+  if (MT.hasGas()) {
+    MT.api('listMolds').then(function (j) {
+      var want = (/[?&]mold=([^&#]+)/.exec(location.search) || [])[1] || '';
+      try { want = decodeURIComponent(want); } catch (e) {}
+      $('mold').innerHTML = '<option value="">— Chọn · 선택 —</option>' + j.molds.map(function (m) {
+        return '<option value="' + esc(m.moldNo) + '">' + esc(m.moldNo + (m.product ? ' · ' + m.product : '') + ' (' + m.machined + ')') + '</option>';
+      }).join('');
+      if (want) { $('mold').value = want; }
+      $('btnMake').disabled = !$('mold').value;
+      if ($('mold').value) $('btnMake').onclick();
+    }).catch(function (e) { $('mold').innerHTML = '<option value="">—</option>'; MT.showError('listMolds', e); });
+  } else { $('mold').innerHTML = '<option value="">—</option>'; }
+})();
+</script>
+</body>
+</html>

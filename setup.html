@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cài đặt · 설정 — MoldTracking</title>
+<!-- MoldTracking setup page v0.1 (2026-10-04)
+     v0.1: first version. Stores the Apps Script /exec address on this device, tests the connection,
+           creates the sheets, and shows a QR/link that stores the address on a worker's phone.
+     Host on GitHub Pages together with mt-common.js and mt-common.css (file names are case sensitive). -->
+<link rel="stylesheet" href="mt-common.css">
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+<script src="mt-common.js"></script>
+<style>
+  #linkQr { background: #fff; padding: 16px; display: inline-block; }
+  #linkQr img, #linkQr canvas { width: 220px; height: 220px; }
+  .links a { display: block; padding: 12px 0; font-size: 17px; border-bottom: 1px solid #e1e5e2; color: #1d4f8a; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Cài đặt <small>설정 (관리자용)</small></h1>
+<div id="err"></div>
+
+<div class="card">
+  <h2>1. Địa chỉ Sheet <small>시트 주소 (/exec)</small></h2>
+  <input type="text" id="gasUrl" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off">
+  <button class="b-in" id="btnSave">Lưu địa chỉ<small>주소 저장</small></button>
+  <div class="msg" id="saveMsg"></div>
+</div>
+
+<div class="card">
+  <h2>2. Kiểm tra kết nối <small>연결 시험과 시트 만들기</small></h2>
+  <button class="b-out" id="btnPing">Kiểm tra kết nối<small>연결 시험</small></button>
+  <button class="b-sub" id="btnSetup">Tạo các sheet<small>시트 만들기 (없는 시트만 만듦)</small></button>
+  <div class="msg" id="pingMsg"></div>
+</div>
+
+<div class="card">
+  <h2>3. Đăng ký điện thoại công nhân <small>작업자 폰에 주소 넣기</small></h2>
+  <div class="small">Quét QR này bằng camera điện thoại, mở bằng Chrome / Safari. · 이 QR을 폰 카메라로 읽고 크롬 또는 사파리로 엽니다. 주소가 그 폰에 저장됩니다.</div>
+  <div id="linkQr"></div>
+  <div class="small" id="linkText"></div>
+  <button class="b-sub" id="btnCopy">Sao chép link<small>링크 복사</small></button>
+</div>
+
+<div class="card links">
+  <h2>Các màn hình <small>화면 목록</small></h2>
+  <a href="register.html">Đăng ký danh sách chi tiết · 부품 리스트 등록</a>
+  <a href="ticket.html">In phiếu di chuyển · 이동전표 출력</a>
+  <a href="input.html">Quét nhập / xuất · 스캔 입력</a>
+</div>
+
+<div class="card"><div class="small" id="selfcheck">Script chưa chạy · 프로그램 실행 안 됨</div></div>
+</div>
+
+<script>
+(function () {
+  var $ = MT.$;
+  MT.init('setup', 'v0.1', 'QR lib: ' + (typeof QRCode === 'function' ? 'OK' : 'MISSING'));
+  $('gasUrl').value = MT.gasUrl();
+
+  function workerLink() {
+    return location.href.replace(/[^\/]*([?#].*)?$/, '') + 'input.html#gas=' + encodeURIComponent(MT.gasUrl());
+  }
+  function drawLink() {
+    var box = $('linkQr');
+    box.innerHTML = '';
+    if (!MT.hasGas()) { $('linkText').textContent = 'Chưa có địa chỉ · 주소를 먼저 저장하십시오.'; return; }
+    var link = workerLink();
+    $('linkText').textContent = link;
+    if (typeof QRCode !== 'function') { box.textContent = 'QR lib MISSING'; return; }
+    new QRCode(box, { text: link, width: 440, height: 440, correctLevel: QRCode.CorrectLevel.M });
+  }
+
+  $('btnSave').onclick = function () {
+    MT.clearError();
+    var ok = MT.setGasUrl($('gasUrl').value);
+    $('saveMsg').className = 'msg ' + (ok ? 'ok' : 'ng');
+    $('saveMsg').textContent = ok ? 'Đã lưu · 저장됨' : 'Địa chỉ phải bắt đầu bằng https://script.google.com/ và kết thúc bằng /exec · 주소 형식이 다름';
+    if (ok) drawLink();
+  };
+
+  function showPing(j) {
+    var miss = j.missing || [];
+    $('pingMsg').className = 'msg ' + (miss.length ? 'warn' : 'ok');
+    $('pingMsg').textContent = 'Kết nối OK · 연결됨\nSheet: ' + j.sheetName + '\nAPI ' + j.version + '\n' +
+      (miss.length ? 'Thiếu sheet · 없는 시트: ' + miss.join(', ') + '\n→ "Tạo các sheet · 시트 만들기"'
+                   : 'Đủ sheet · 시트 모두 있음');
+  }
+  function ping() {
+    $('pingMsg').className = 'msg'; $('pingMsg').textContent = 'Đang kiểm tra · 확인 중...';
+    return MT.api('ping').then(showPing);
+  }
+  $('btnPing').onclick = function () {
+    MT.clearError();
+    ping().catch(function (e) { $('pingMsg').textContent = ''; MT.showError('ping', e); });
+  };
+  $('btnSetup').onclick = function () {
+    MT.clearError();
+    var b = this; b.disabled = true;
+    $('pingMsg').className = 'msg'; $('pingMsg').textContent = 'Đang tạo sheet · 시트 만드는 중...';
+    MT.api('setup').then(function (j) {
+      var made = j.created || [];
+      return ping().then(function () {
+        $('pingMsg').textContent += '\n' + (made.length ? 'Đã tạo · 새로 만듦: ' + made.join(', ') : 'Không tạo mới · 새로 만든 시트 없음');
+      });
+    }).catch(function (e) { $('pingMsg').textContent = ''; MT.showError('setup', e); })
+      .then(function () { b.disabled = false; });
+  };
+  $('btnCopy').onclick = function () {
+    var t = $('linkText').textContent, b = this;
+    if (!MT.hasGas()) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(function () { b.firstChild.nodeValue = 'Đã sao chép'; },
+                                             function (e) { MT.showError('copy', e, true); });
+    } else { MT.showError('copy', MT.named('NoClipboard', 'Giữ ngón tay trên link để sao chép · 링크를 길게 눌러 복사'), true); }
+  };
+  drawLink();
+})();
+</script>
+</body>
+</html>

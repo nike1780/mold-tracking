@@ -3,230 +3,223 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Quét nhập · 스캔 입력</title>
-<!-- Mold Tracking - input.html  v1.0 (2026-10-04)
-     v1.0: first version (stage 0). Scan the slip QR -> part name and current state -> Nhap (IN) / Xuat (OUT).
-           Camera loop taken from the tested scan.html v1.4 (own loop, BarcodeDetector + jsQR, full frame / centre zoom).
-           No typing: the sheet address arrives by the setup QR (#gas=...), worker and process are picked from lists.
-           If no QR is read within 3 s, a "pick from list" button appears (mold -> part).
-           After a record the same code is ignored for 5 s, so the slip just handled is not read again at once.
-     Host: GitHub Pages (same folder as register.html and slip.html). Open in Chrome or Safari, not inside Zalo.
-     Address options: input.html?p=QC fixes the process for that shortcut. -->
-<style>
-  :root { --ink: #1f2a24; --paper: #f4f5f3; --line: #c9cec9; --go: #2e7d5b; --alt: #3b6ea5; --stop: #8a8f8c; --ng: #c0392b; --soft: #6b736e; }
-  * { box-sizing: border-box; }
-  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Malgun Gothic", sans-serif;
-         margin: 0 auto; padding: 10px; background: var(--paper); color: var(--ink); max-width: 520px; }
-  small { font-weight: 400; font-size: .72em; opacity: .85; margin-left: 6px; }
-  .card { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
-  .card h2 { font-size: 16px; margin: 0 0 8px; }
-  button { display: block; width: 100%; padding: 18px 12px; margin: 8px 0; font-size: 20px; font-weight: 700; border: 0;
-           border-radius: 12px; color: #fff; text-align: center; font-family: inherit; }
-  button:disabled { opacity: .4; }
-  button:focus-visible, input:focus-visible { outline: 3px solid #f0b429; outline-offset: 2px; }
-  .go { background: var(--go); } .alt { background: var(--alt); } .stop { background: var(--stop); }
-  .big { padding: 30px 12px; font-size: 26px; }
-  .opt { background: #fff; color: var(--ink); border: 2px solid var(--line); font-size: 17px; padding: 13px 12px; text-align: left; margin: 6px 0; }
-  .opt.on { border-color: var(--go); background: #e6f2ec; }
-  #bar { display: flex; align-items: center; background: var(--ink); color: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
-  #barText { flex: 1; font-size: 17px; font-weight: 700; line-height: 1.25; }
-  #barText span { display: block; font-size: 13px; font-weight: 400; opacity: .8; }
-  #btnSet { width: auto; margin: 0; padding: 8px 12px; font-size: 14px; background: #46544c; }
-  #videoBox { position: relative; display: none; }
-  #video { width: 100%; border-radius: 10px; background: #000; display: block; }
-  #aim { position: absolute; left: 50%; top: 50%; width: 46%; aspect-ratio: 1; transform: translate(-50%, -50%);
-         border: 3px solid rgba(255,255,255,.9); border-radius: 10px; box-shadow: 0 0 0 2000px rgba(0,0,0,.25); pointer-events: none; }
-  #videoBox { overflow: hidden; border-radius: 10px; }
-  .msg { font-size: 15px; white-space: pre-wrap; margin: 6px 2px; }
-  .ok { color: var(--go); } .ng { color: var(--ng); }
-  .small { font-size: 12px; color: var(--soft); word-break: break-all; }
-  #pCode { font-family: Consolas, "Courier New", monospace; font-size: 26px; font-weight: 700; word-break: break-all; }
-  #pName { font-size: 21px; font-weight: 700; margin-top: 4px; }
-  #pVi { font-size: 17px; }
-  #pMold, #pState { font-size: 15px; margin-top: 6px; }
-  #pState { padding: 8px 10px; background: #eef0ee; border-radius: 8px; }
-  #done { text-align: center; padding: 26px 12px; }
-  #done .mark { font-size: 64px; line-height: 1; color: var(--go); }
-  #done .what { font-size: 24px; font-weight: 700; margin-top: 8px; }
-  #done .code { font-family: Consolas, "Courier New", monospace; font-size: 18px; margin-top: 6px; }
-  input[type=text] { width: 100%; padding: 12px; font-size: 15px; border: 1px solid var(--line); border-radius: 8px; }
-  .view { display: none; }
-</style>
+<title>Quét nhập / xuất · 스캔 입력 — MoldTracking</title>
+<!-- MoldTracking scan input page v0.1 (2026-10-04)
+     v0.1: first version. Scan the ticket QR -> part name and current state -> NHẬP (입고) / XUẤT (출고).
+           Camera loop taken from the QR Scan Test page v1.4 (own loop, BarcodeDetector + jsQR,
+           full frame / centre zoom alternating), which was confirmed on Galaxy, iPhone and Xiaomi.
+           If nothing is read within 3 s a "choose from list" button appears (slow phones).
+           The process (công đoạn) is chosen once per phone, or given in the address: input.html?proc=QC
+     Must be hosted OUTSIDE Apps Script (GitHub Pages): the camera is refused inside an Apps Script web app.
+     Open with Chrome / Safari (home screen shortcut), not inside Zalo. -->
+<link rel="stylesheet" href="mt-common.css">
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="mt-common.js"></script>
+<style>
+  section { display: none; }
+  #procBar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; }
+  #procBar b { font-size: 18px; }
+  #procBar button { width: auto; margin: 0; padding: 8px 14px; font-size: 14px; }
+  #video { width: 100%; border-radius: 10px; background: #000; }
+  #last { font-size: 17px; font-weight: 700; min-height: 24px; }
+  #pCode { font-size: 22px; word-break: break-all; }
+  #pName { font-size: 24px; font-weight: 700; margin: 4px 0 8px; }
+  #pState { font-size: 16px; padding: 8px; background: #eef0ee; border-radius: 8px; }
+</style>
 </head>
 <body>
-
-<div id="bar" style="display:none">
-  <div id="barText"></div>
-  <button id="btnSet">Cài đặt<small>설정</small></button>
+<div class="wrap">
+<div class="card" id="procBar">
+  <div><span class="small">Công đoạn · 공정</span><br><b id="procName">—</b> <span class="small" id="workerName"></span></div>
+  <button class="b-sub" id="btnProc">Đổi · 바꾸기</button>
 </div>
+<div id="err"></div>
+<div id="noaddr">Chưa có địa chỉ Sheet · 시트 주소가 없습니다. Hỏi quản lý để lấy QR cài đặt · 관리자에게 설정 QR을 받으십시오. <a href="setup.html">Cài đặt · 설정</a></div>
 
-<!-- setup: sheet address (by QR), worker, process -->
-<div class="view" id="vSetup">
-  <div class="card" id="needGas">
-    <h2>Chưa có địa chỉ Sheet <small>시트 주소 없음</small></h2>
-    <div class="msg">Mở camera điện thoại và quét mã QR cài đặt trên máy tính (trang Đăng ký).
-PC 등록 화면에 나오는 설정 QR을 폰 기본 카메라로 읽으십시오.</div>
-    <input type="text" id="gasUrl" placeholder="https://script.google.com/macros/s/.../exec">
-    <button class="alt" id="btnGas">Lưu địa chỉ<small>주소 저장</small></button>
-  </div>
-  <div class="card" id="setWorker">
-    <h2>Bạn là ai? <small>작업자 선택</small></h2>
-    <div id="workers"></div>
-  </div>
-  <div class="card" id="setProc">
-    <h2>Công đoạn nào? <small>공정 선택</small></h2>
-    <div id="procs"></div>
-  </div>
-  <div class="msg" id="setMsg"></div>
-  <button class="go" id="btnSetDone" disabled>Xong<small>완료</small></button>
-</div>
+<section id="vPick" class="card">
+  <h2 id="pickTitle"></h2>
+  <div id="pickList"></div>
+  <button class="b-sub" id="btnPickBack" style="display:none">Quay lại<small>뒤로</small></button>
+</section>
 
-<!-- scan: one question = which part is in front of me -->
-<div class="view" id="vScan">
+<section id="vHome">
+  <div class="card"><div id="last" class="msg"></div></div>
+  <button class="b-in b-big" id="btnScan">QUÉT QR<small>스캔</small></button>
+  <button class="b-sub" id="btnList">Chọn từ danh sách<small>목록에서 선택 (QR이 안 읽힐 때)</small></button>
+</section>
+
+<section id="vScan" class="card">
+  <video id="video"></video>
+  <div class="msg" id="scanMsg">Đưa QR vào giữa màn hình · QR을 화면 가운데에</div>
+  <button class="b-sub" id="btnScanList" style="display:none">Chọn từ danh sách<small>목록에서 선택</small></button>
+  <button class="b-out" id="btnCam" style="display:none">Đổi camera<small>카메라 바꾸기</small></button>
+  <button class="b-sub" id="btnStop">Dừng<small>중지</small></button>
+  <div class="small" id="camInfo"></div>
+</section>
+
+<section id="vPart">
   <div class="card">
-    <button class="go big" id="btnStart">Quét QR<small>스캔</small></button>
-    <div id="videoBox"><video id="video"></video><div id="aim"></div></div>
-    <div class="msg" id="scanMsg"></div>
-    <button class="alt" id="btnCam" style="display:none">Đổi camera<small>카메라 바꾸기</small></button>
-    <button class="stop" id="btnList" style="display:none">Chọn từ danh sách<small>목록에서 선택</small></button>
-    <div class="small" id="camInfo"></div>
-  </div>
-</div>
-
-<!-- part: name + state, then one button -->
-<div class="view" id="vPart">
-  <div class="card">
-    <div id="pCode"></div>
+    <div class="code" id="pCode"></div>
     <div id="pName"></div>
-    <div id="pVi"></div>
-    <div id="pMold"></div>
+    <div class="small" id="pMold"></div>
     <div id="pState"></div>
   </div>
-  <button class="go big" id="btnIn">Nhập<small>입고</small></button>
-  <button class="alt big" id="btnOut">Xuất<small>출고</small></button>
-  <div class="msg" id="partMsg"></div>
-  <button class="stop" id="btnBack">Quét lại<small>다시 스캔</small></button>
-</div>
-
-<div class="view" id="vDone">
-  <div class="card" id="done"><div class="mark">✓</div><div class="what" id="doneWhat"></div><div class="code" id="doneCode"></div></div>
-</div>
-
-<!-- list: fallback when the QR cannot be read -->
-<div class="view" id="vList">
-  <div class="card">
-    <h2 id="listTitle"></h2>
-    <div class="msg" id="listMsg"></div>
-    <div id="listBox"></div>
+  <div class="row2">
+    <button class="b-in b-big" id="btnIn">NHẬP<small>입고</small></button>
+    <button class="b-out b-big" id="btnOut">XUẤT<small>출고</small></button>
   </div>
-  <button class="stop" id="btnListBack">Quay lại<small>돌아가기</small></button>
-</div>
+  <div class="msg" id="sendMsg"></div>
+  <button class="b-sub" id="btnCancel">Hủy<small>취소</small></button>
+</section>
 
 <div class="card"><div class="small" id="selfcheck">Script chưa chạy · 프로그램 실행 안 됨</div></div>
+</div>
 
 <script>
-  var VER = '1.0', PAGE = 'input';
-  var $ = function (id) { return document.getElementById(id); };
-  var GAS_RE = /^https:\/\/script\.google\.com\/.+\/exec$/;
-  var ID_RE = /^H(R)?[MPD][0-9]{5}[A-Z0-9]{1,11}$/;
-  var STATE_TXT = { WAIT: 'chờ · 대기', RUN: 'đang làm · 진행 중', DONE: 'xong · 완료', MOVE: 'đã xuất · 출고됨', NG: 'không đạt · 불합격', HOLD: 'tạm dừng · 중단' };
-  var EVENT_TXT = { IN: 'Nhập · 입고', OUT: 'Xuất · 출고' };
-
-  function lsGet(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
-  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-  function lsObj(k) { try { return JSON.parse(lsGet(k) || 'null'); } catch (e) { return null; } }
-
-  // Setup QR: input.html#gas=<address>. Stored once, then removed from the address bar.
-  var hash = location.hash.match(/gas=([^&]+)/);
-  if (hash) {
-    var fromQr = decodeURIComponent(hash[1]);
-    if (GAS_RE.test(fromQr)) lsSet('mt_gasUrl', fromQr);
-    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
-  }
-  window.addEventListener('hashchange', function () { if (/gas=/.test(location.hash)) location.reload(); });
-  var GAS_URL = lsGet('mt_gasUrl');
-  var worker = lsObj('mt_worker'), proc = lsObj('mt_process');
-  var fixedProc = (location.search.match(/[?&]p=([^&]+)/) || [])[1] || '';
-  var masters = null, cur = null, busy = false, backTimer = null, lastCode = '', lastTime = 0;
-
-  function api(action, data) {
-    var body = data || {};
-    body.action = action; body.device = navigator.userAgent;
-    if (!GAS_RE.test(GAS_URL)) return Promise.reject(new Error('NO_SHEET_ADDRESS'));
-    return fetch(GAS_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) })
-      .then(function (r) { return r.json(); })
-      .then(function (j) { if (!j.ok) throw new Error(j.error); return j; });
-  }
-  function errText(e) { return (e && e.name && e.name !== 'Error' ? e.name + ': ' : '') + (e && e.message ? e.message : String(e)); }
-  function logErr(e) { api('logError', { page: PAGE, error: errText(e) }).catch(function () {}); }
-  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-
-  function view(id) {
-    ['vSetup', 'vScan', 'vPart', 'vDone', 'vList'].forEach(function (v) { $(v).style.display = (v === id ? 'block' : 'none'); });
-    $('bar').style.display = (id === 'vSetup' ? 'none' : 'flex');
-    if (id !== 'vScan') stopScan();
-    window.scrollTo(0, 0);
-  }
-  function drawBar() {
-    $('barText').innerHTML = esc(proc ? proc.name_vi : '?') + '<small>' + esc(proc ? proc.name_ko : '') + '</small>' +
-                             '<span>' + esc(worker ? worker.name : '') + '</span>';
-  }
-
-  // ---------- setup ----------
-  function options(box, list, picked, label, onPick) {
-    box.innerHTML = '';
-    list.forEach(function (item) {
-      var b = document.createElement('button');
-      b.className = 'opt' + (picked && String(picked.code) === String(item.code) ? ' on' : '');
-      b.innerHTML = label(item);
-      b.onclick = function () { onPick(item); };
-      box.appendChild(b);
-    });
-  }
-  function drawSetup() {
-    var hasGas = GAS_RE.test(GAS_URL);
-    $('needGas').style.display = hasGas ? 'none' : 'block';
-    $('setWorker').style.display = $('setProc').style.display = (hasGas && masters) ? 'block' : 'none';
-    if (!hasGas || !masters) { $('btnSetDone').disabled = true; return; }
-    options($('workers'), masters.workers, worker, function (w) { return esc(w.name) + '<small>' + esc(w.code) + '</small>'; },
-            function (w) { worker = { code: String(w.code), name: String(w.name) }; drawSetup(); });
-    if (!masters.workers.length) $('workers').innerHTML =
-      '<div class="msg ng">Chưa có danh sách nhân viên (sheet Workers) · 작업자 목록이 비어 있습니다 (Workers 시트). 이름 없이 진행합니다.</div>';
-    var plist = masters.processes;
-    if (fixedProc) plist = plist.filter(function (p) { return String(p.code) === fixedProc; });
-    if (fixedProc && plist.length === 1) proc = { code: String(plist[0].code), name_vi: String(plist[0].name_vi), name_ko: String(plist[0].name_ko) };
-    options($('procs'), plist, proc, function (p) { return esc(p.name_vi) + '<small>' + esc(p.name_ko) + '</small>'; },
-            function (p) { proc = { code: String(p.code), name_vi: String(p.name_vi), name_ko: String(p.name_ko) }; drawSetup(); });
-    $('btnSetDone').disabled = !(proc && (worker || !masters.workers.length));
-  }
-  function openSetup() {
-    view('vSetup');
-    $('setMsg').className = 'msg'; $('setMsg').textContent = '';
-    drawSetup();
-    if (!GAS_RE.test(GAS_URL)) return;
-    $('setMsg').textContent = 'Đang tải danh sách · 목록 불러오는 중...';
-    api('masters').then(function (j) { masters = j; $('setMsg').textContent = ''; drawSetup(); })
-      .catch(function (e) { $('setMsg').className = 'msg ng'; $('setMsg').textContent = 'Lỗi tải · 불러오기 실패: ' + errText(e); });
-  }
-  $('btnGas').onclick = function () {
-    var u = $('gasUrl').value.trim();
-    if (!GAS_RE.test(u)) { $('setMsg').className = 'msg ng'; $('setMsg').textContent = 'Địa chỉ phải kết thúc bằng /exec · 주소는 /exec 로 끝나야 합니다'; return; }
-    GAS_URL = u; lsSet('mt_gasUrl', u); openSetup();
-  };
-  $('btnSetDone').onclick = function () {
-    lsSet('mt_worker', JSON.stringify(worker)); lsSet('mt_process', JSON.stringify(proc));
-    drawBar(); toScan(false);
-  };
-  $('btnSet').onclick = openSetup;
-
-  // ---------- camera scan (loop from the tested scan.html v1.4) ----------
-  var video = $('video'), canvas = document.createElement('canvas');
-  var ctx = canvas.getContext('2d', { willReadFrequently: true });
-  var stream = null, timer = null, t0 = 0, working = false, camNote = '', cams = [], camIdx = -1, tickN = 0;
+(function () {
+  var $ = MT.$, esc = MT.esc;
   var detector = null;
   try { if ('BarcodeDetector' in window) detector = new BarcodeDetector({ formats: ['qr_code'] }); } catch (e) { detector = null; }
   var decoderName = (detector ? 'BarcodeDetector+' : '') + (typeof jsQR === 'function' ? 'jsQR' : 'jsQR-MISSING');
+  MT.init('input', 'v0.1', decoderName);
+
+  var masters = { processes: [], workers: [] }, cur = null;       // cur: part shown on the part view
+  var EV_TEXT = { IN: 'NHẬP · 입고', OUT: 'XUẤT · 출고' };
+
+  // ---------- views ----------
+  function view(name) {
+    ['vPick', 'vHome', 'vScan', 'vPart'].forEach(function (v) { $(v).style.display = v === name ? 'block' : 'none'; });
+  }
+  function home(text, cls) {
+    cur = null;
+    if (text !== undefined) { $('last').textContent = text; $('last').className = 'msg ' + (cls || ''); }
+    view('vHome');
+  }
+  function pick(title, items, onPick, onBack) {
+    $('pickTitle').textContent = title;
+    var box = $('pickList');
+    box.innerHTML = '';
+    items.forEach(function (it) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'pick';
+      b.innerHTML = esc(it.label) + (it.sub ? '<small>' + esc(it.sub) + '</small>' : '');
+      b.onclick = function () { onPick(it.value); };
+      box.appendChild(b);
+    });
+    if (!items.length) box.textContent = 'Không có dữ liệu · 목록이 비어 있음';
+    $('btnPickBack').style.display = onBack ? 'block' : 'none';
+    $('btnPickBack').onclick = onBack || null;
+    view('vPick');
+  }
+
+  // ---------- process and worker (chosen once, kept on this phone) ----------
+  function procOf(code) {
+    for (var i = 0; i < masters.processes.length; i++) if (masters.processes[i].code === code) return masters.processes[i];
+    return null;
+  }
+  function procLabel(code) { var p = procOf(code); return p ? p.vi + ' · ' + p.ko : code; }
+  function header() {
+    var p = MT.get('mtProc');
+    $('procName').textContent = p ? procLabel(p) : '—';
+    $('workerName').textContent = MT.get('mtWorkerName');
+  }
+  function chooseProc() {
+    pick('Bạn đang ở công đoạn nào? · 어느 공정입니까?', masters.processes.map(function (p) {
+      return { label: p.vi, sub: p.ko, value: p.code };
+    }), function (code) { MT.set('mtProc', code); header(); chooseWorker(false); });
+  }
+  function chooseWorker(force) {
+    var ws = masters.workers, known = ws.some(function (w) { return w.code === MT.get('mtWorker'); });
+    if (!ws.length || (known && !force)) { home(); return; }
+    pick('Bạn là ai? · 누구입니까?', ws.map(function (w) { return { label: w.name, sub: w.code, value: w.code }; }),
+      function (code) {
+        ws.forEach(function (w) { if (w.code === code) MT.set('mtWorkerName', w.name); });
+        MT.set('mtWorker', code); header(); home();
+      });
+  }
+  function start() {
+    header();
+    if (!masters.processes.length) { home('Chưa có danh sách công đoạn · 공정 목록 없음', 'ng'); return; }
+    if (!procOf(MT.get('mtProc'))) chooseProc(); else chooseWorker(false);
+  }
+  $('btnProc').onclick = function () { stopScan(); if (masters.processes.length) chooseProc(); };
+
+  // ---------- part view ----------
+  function showPart(part, mold, state) {
+    cur = part;
+    $('pCode').textContent = part.partId;
+    $('pName').textContent = part.name || '(không tên · 이름 없음)';
+    $('pMold').textContent = 'Khuôn · 금형 ' + part.moldNo + (mold && mold.product ? ' — ' + mold.product : '') +
+                             (part.material ? ' / ' + part.material : '');
+    $('pState').textContent = state
+      ? 'Hiện tại · 현재: ' + (state.process ? procLabel(state.process) + ' — ' : '') + (MT.STATUS[state.status] || state.status) +
+        (state.lastEvent ? ' (' + MT.fmtTime(state.lastTime) + ')' : '')
+      : 'Hiện tại · 현재: ' + MT.STATUS.NEW;
+    $('sendMsg').textContent = '';
+    $('btnIn').disabled = false; $('btnOut').disabled = false;
+    view('vPart');
+  }
+  function lookup(text) {
+    MT.clearError();
+    var code = String(text || '').toUpperCase().trim();
+    if (!MT.ID_RE.test(code)) { home('QR không phải mã chi tiết · 부품코드가 아닌 QR: ' + code.substring(0, 40), 'ng'); return; }
+    home('Đang tìm · 찾는 중... ' + code, '');
+    MT.api('getPart', { partId: code }).then(function (j) {
+      if (!j.found) { home('Chưa đăng ký · 등록되지 않은 코드: ' + code, 'ng'); return; }
+      if (j.part.type !== 'M') { home('Hàng tiêu chuẩn, không theo dõi từng cái · 표준품 (낱개 추적 안 함): ' + code, 'warn'); return; }
+      showPart(j.part, j.mold, j.state);
+    }).catch(function (e) { home('', ''); MT.showError('getPart', e); });
+  }
+  function send(ev) {
+    if (!cur) return;
+    MT.clearError();
+    var part = cur, t1 = Date.now();
+    $('btnIn').disabled = true; $('btnOut').disabled = true;              // no double entry
+    $('sendMsg').className = 'msg'; $('sendMsg').textContent = 'Đang gửi · 보내는 중...';
+    MT.api('logEvent', { partId: part.partId, process: MT.get('mtProc'), event: ev, worker: MT.get('mtWorker'), rev: 0 })
+      .then(function () {
+        if (navigator.vibrate) navigator.vibrate(80);
+        home('✔ ' + EV_TEXT[ev] + ' — ' + part.partId + ' ' + part.name + '\nĐã ghi · 기록됨 (' +
+             ((Date.now() - t1) / 1000).toFixed(1) + ' s)', 'ok');
+      }).catch(function (e) {
+        $('sendMsg').className = 'msg ng';
+        $('sendMsg').textContent = 'Chưa ghi được, bấm lại · 기록 안 됨, 다시 누르십시오';
+        $('btnIn').disabled = false; $('btnOut').disabled = false;
+        MT.showError('logEvent', e);
+      });
+  }
+  $('btnIn').onclick = function () { send('IN'); };
+  $('btnOut').onclick = function () { send('OUT'); };
+  $('btnCancel').onclick = function () { home('', ''); };
+
+  // ---------- choose from list (always available when the QR cannot be read) ----------
+  function natural(a, b) { return a.partId.localeCompare(b.partId, 'en', { numeric: true }); }
+  function listMolds() {
+    stopScan(); MT.clearError();
+    pick('Đang tải · 불러오는 중...', [], function () {}, function () { home(); });
+    MT.api('listMolds').then(function (j) {
+      pick('Chọn khuôn · 금형 선택', j.molds.map(function (m) {
+        return { label: m.moldNo, sub: (m.product ? m.product + ' — ' : '') + m.machined + ' chi tiết · 부품', value: m.moldNo };
+      }), listParts, function () { home(); });
+    }).catch(function (e) { home(); MT.showError('listMolds', e); });
+  }
+  function listParts(moldNo) {
+    pick('Đang tải · 불러오는 중...', [], function () {}, listMolds);
+    MT.api('listParts', { moldNo: moldNo }).then(function (j) {
+      var parts = j.parts.filter(function (p) { return p.type === 'M'; }).sort(natural), byId = {};
+      parts.forEach(function (p) { byId[p.partId] = p; });
+      pick('Chọn chi tiết · 부품 선택 — ' + moldNo, parts.map(function (p) {
+        return { label: p.partNo + '  ' + p.name, sub: p.state ? (MT.STATUS[p.state.status] || '') : '', value: p.partId };
+      }), function (id) { showPart(byId[id], j.mold, byId[id].state); }, listMolds);
+    }).catch(function (e) { home(); MT.showError('listParts', e); });
+  }
+  $('btnList').onclick = listMolds;
+  $('btnScanList').onclick = listMolds;
+
+  // ---------- camera scan (from QR Scan Test v1.4) ----------
+  var video = $('video'), canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d', { willReadFrequently: true });
+  var stream = null, timer = null, t0 = 0, working = false, cams = [], camIdx = -1, tickN = 0;
 
   function decodeCanvas() {
     var p = detector
@@ -244,17 +237,12 @@ PC 등록 화면에 나오는 설정 QR을 폰 기본 카메라로 읽으십시�
     if (timer) { clearInterval(timer); timer = null; }
     if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
   }
-  function stopScan() {
-    stopStream();
-    $('videoBox').style.display = 'none';
-    $('btnCam').style.display = 'none';
-    $('btnStart').style.display = 'block';
-  }
+  function stopScan() { stopStream(); }
   function tick() {
     if (working || !stream || !video.videoWidth) return;
     working = true; tickN++;
     var vw = video.videoWidth, vh = video.videoHeight;
-    var zoom = (tickN % 2 === 0);                              // every other frame: centre half, enlarged
+    var zoom = (tickN % 2 === 0);                                   // every other frame: centre half, enlarged
     var s = Math.min(vw, vh) * (zoom ? 0.5 : 1);
     var out = zoom ? Math.min(1080, Math.round(s * 1.5)) : Math.min(s, 1080);
     canvas.width = out; canvas.height = out;
@@ -262,12 +250,15 @@ PC 등록 화면에 나오는 설정 QR을 폰 기본 카메라로 읽으십시�
     decodeCanvas().then(function (text) {
       working = false;
       if (!stream) return;
-      if (text) { gotCode(text, 'scan'); return; }
-      if (Date.now() - t0 > 3000) $('btnList').style.display = 'block';      // slow phone or damaged slip
-    }).catch(function (e) {
-      working = false;
-      $('camInfo').textContent = camNote + ' / decode error: ' + errText(e);
-    });
+      if (text) {
+        if (navigator.vibrate) navigator.vibrate(120);
+        stopScan();
+        lookup(text);
+      } else if (Date.now() - t0 > 3000) {
+        $('btnScanList').style.display = 'block';
+        $('scanMsg').textContent = 'Chưa đọc được: để xa hơn (25–30 cm) hoặc chọn từ danh sách · 안 읽히면 더 멀리(25~30cm) 또는 목록에서 선택';
+      }
+    }).catch(function (e) { working = false; $('camInfo').textContent = 'decode error: ' + (e && e.message ? e.message : e); });
   }
   function openCamera(deviceId) {
     var v = { width: { ideal: 1920 }, height: { ideal: 1080 } };
@@ -276,7 +267,6 @@ PC 등록 화면에 나오는 설정 QR을 폰 기본 카메라로 읽으십시�
       stream = s;
       video.setAttribute('playsinline', ''); video.setAttribute('muted', ''); video.muted = true;
       video.srcObject = s;
-      $('videoBox').style.display = 'block';
       return video.play();
     }).then(function () {
       var track = stream.getVideoTracks()[0];
@@ -284,152 +274,52 @@ PC 등록 화면에 나오는 설정 QR을 폰 기본 카메라로 읽으십시�
       return navigator.mediaDevices.enumerateDevices().catch(function () { return []; });
     }).then(function (list) {
       var track = stream.getVideoTracks()[0];
-      var curId = track.getSettings ? track.getSettings().deviceId : '';
+      var id = track.getSettings ? track.getSettings().deviceId : '';
       cams = list.filter(function (d) { return d.kind === 'videoinput' && !/front|user|전면|trước/i.test(d.label || ''); });
       camIdx = -1;
-      cams.forEach(function (d, i) { if (d.deviceId === curId) camIdx = i; });
+      cams.forEach(function (d, i) { if (d.deviceId === id) camIdx = i; });
       $('btnCam').style.display = cams.length > 1 ? 'block' : 'none';
-      $('btnStart').style.display = 'none';
-      $('scanMsg').className = 'msg';
-      $('scanMsg').textContent = 'Đưa QR vào giữa khung, nếu mờ thì để xa hơn\nQR을 네모 안에. 흐리면 더 멀리(25~30cm)';
+      $('camInfo').textContent = decoderName + ' / cam ' + (camIdx + 1) + ' of ' + cams.length + ' / ' + (track.label || 'no label');
       t0 = Date.now();
-      setTimeout(function () {
-        camNote = video.videoWidth + 'x' + video.videoHeight + ' / ' + decoderName + ' / cam ' + (camIdx + 1) + ' of ' + cams.length;
-        $('camInfo').textContent = camNote;
-      }, 500);
       timer = setInterval(tick, 150);
     });
   }
   function camFail(err) {
     stopScan();
-    $('scanMsg').className = 'msg ng';
-    $('scanMsg').textContent = 'Không mở được camera · 카메라 열기 실패\n' + errText(err) +
-      '\nMở bằng Chrome hoặc Safari (không dùng Zalo) · 크롬 또는 사파리로 여십시오';
-    $('btnList').style.display = 'block';
-    logErr(err);
+    home('Không mở được camera → chọn từ danh sách · 카메라 열기 실패 → 목록에서 선택', 'ng');
+    MT.showError('camera', err);
   }
-  function startScan() {
-    $('scanMsg').className = 'msg'; $('scanMsg').textContent = 'Đang mở camera · 카메라 여는 중...';
-    $('btnList').style.display = 'none';
-    if (typeof jsQR !== 'function' && !detector) { camFail(new Error('DECODER_NOT_LOADED (jsQR)')); return; }
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { camFail(new Error('NO_getUserMedia')); return; }
-    openCamera(null).catch(camFail);
-  }
-  function toScan(autoStart) {
-    cur = null;
+  $('btnScan').onclick = function () {
+    MT.clearError();
+    if (typeof jsQR !== 'function' && !detector) { camFail(MT.named('DecoderMissing', 'jsQR không tải được · jsQR을 불러오지 못함')); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { camFail(MT.named('NoGetUserMedia', 'Trình duyệt không hỗ trợ camera · 이 브라우저는 카메라 미지원 (Chrome / Safari로 여십시오)')); return; }
+    $('btnScanList').style.display = 'none';
+    $('scanMsg').textContent = 'Đưa QR vào giữa màn hình · QR을 화면 가운데에';
     view('vScan');
-    $('scanMsg').textContent = ''; $('camInfo').textContent = ''; $('btnList').style.display = 'none';
-    if (autoStart) startScan();
-  }
-  $('btnStart').onclick = startScan;
+    openCamera(null).catch(camFail);
+  };
   $('btnCam').onclick = function () {
     if (cams.length < 2) return;
     var next = cams[(camIdx + 1) % cams.length];
     stopStream();
     openCamera(next.deviceId).catch(camFail);
   };
-  document.addEventListener('visibilitychange', function () { if (document.hidden && stream) stopScan(); });
+  $('btnStop').onclick = function () { stopScan(); home(); };
 
-  // ---------- part ----------
-  function fmtTime(t) {
-    var d = new Date(t);
-    if (isNaN(d)) return String(t || '');
-    var p = function (n) { return (n < 10 ? '0' : '') + n; };
-    return p(d.getMonth() + 1) + '/' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
-  }
-  function gotCode(text, how) {
-    var code = String(text).trim().toUpperCase();
-    if (!ID_RE.test(code) || code.length >= 20) {                 // some other QR: keep scanning
-      $('scanMsg').className = 'msg ng';
-      $('scanMsg').textContent = 'Không phải mã chi tiết · 부품 코드가 아닙니다: ' + code.slice(0, 40);
-      return;
-    }
-    if (how === 'scan' && code === lastCode && Date.now() - lastTime < 5000) return;   // slip still in front of the camera
-    if (busy) return;
-    busy = true;
-    if (navigator.vibrate) navigator.vibrate(120);
-    stopScan();
-    $('btnStart').style.display = 'none';
-    $('scanMsg').className = 'msg'; $('scanMsg').textContent = code + '\nĐang tìm · 조회 중...';
-    api('lookup', { part_id: code }).then(function (j) {
-      busy = false;
-      cur = { part: j.part, how: how };
-      $('pCode').textContent = j.part.part_id;
-      $('pName').textContent = j.part.name;
-      $('pVi').textContent = j.part.name_vi;
-      $('pMold').textContent = 'Khuôn · 금형: ' + j.part.mold_id + (j.mold && j.mold.product ? '  ' + j.mold.product : '') +
-                               (j.mold && j.mold.due_date ? '   Hạn · 납기 ' + j.mold.due_date : '');
-      $('pState').textContent = j.state
-        ? 'Hiện tại · 현재: ' + j.state.process + ' / ' + (STATE_TXT[j.state.state] || j.state.state) + ' / ' + fmtTime(j.state.last_time)
-        : 'Hiện tại · 현재: chưa có ghi nhận · 기록 없음';
-      $('partMsg').textContent = '';
-      $('btnIn').disabled = $('btnOut').disabled = false;
-      view('vPart');
-    }).catch(function (e) {
-      busy = false;
-      var notFound = /PART_NOT_FOUND/.test(errText(e));
-      $('btnStart').style.display = 'block';
-      $('scanMsg').className = 'msg ng';
-      $('scanMsg').textContent = notFound
-        ? code + '\nChi tiết chưa đăng ký · 등록되지 않은 부품입니다'
-        : code + '\nLỗi tra cứu · 조회 실패: ' + errText(e);
-      if (!notFound) logErr(e);
-    });
-  }
-  function record(ev) {
-    if (busy || !cur) return;
-    busy = true;
-    $('btnIn').disabled = $('btnOut').disabled = true;
-    $('partMsg').className = 'msg'; $('partMsg').textContent = 'Đang ghi · 기록 중...';
-    api('event', { part_id: cur.part.part_id, process: proc.code, event: ev, worker: worker ? worker.name : '', memo: cur.how === 'list' ? 'LIST' : '' })
-      .then(function (j) {
-        busy = false; lastCode = cur.part.part_id; lastTime = Date.now();
-        $('doneWhat').textContent = proc.name_vi + ': ' + EVENT_TXT[ev];
-        $('doneCode').textContent = cur.part.part_id + '  (row ' + j.row + ')';
-        view('vDone');
-        backTimer = setTimeout(function () { toScan(true); }, 1500);
-      }).catch(function (e) {
-        busy = false;
-        $('btnIn').disabled = $('btnOut').disabled = false;
-        $('partMsg').className = 'msg ng';
-        $('partMsg').textContent = 'CHƯA GHI ĐƯỢC, bấm lại · 기록되지 않았습니다. 다시 누르십시오\n' + errText(e);
-        logErr(e);
-      });
-  }
-  $('btnIn').onclick = function () { record('IN'); };
-  $('btnOut').onclick = function () { record('OUT'); };
-  $('btnBack').onclick = function () { toScan(true); };
-
-  // ---------- list fallback: mold -> part ----------
-  function listFail(e) { $('listMsg').className = 'msg ng'; $('listMsg').textContent = 'Lỗi tải · 불러오기 실패: ' + errText(e); logErr(e); }
-  function listMolds() {
-    view('vList');
-    $('listTitle').innerHTML = 'Chọn khuôn<small>금형 선택</small>';
-    $('listBox').innerHTML = ''; $('listMsg').className = 'msg'; $('listMsg').textContent = 'Đang tải · 불러오는 중...';
-    api('masters').then(function (j) {
-      masters = j; $('listMsg').textContent = j.molds.length ? '' : 'Chưa có khuôn · 등록된 금형이 없습니다';
-      options($('listBox'), j.molds.map(function (m) { return { code: m.mold_id, product: m.product }; }), null,
-              function (m) { return esc(m.code) + '<small>' + esc(m.product) + '</small>'; }, function (m) { listParts(m.code); });
-    }).catch(listFail);
-  }
-  function listParts(moldId) {
-    $('listTitle').innerHTML = esc(moldId) + '<small>Chọn chi tiết · 부품 선택</small>';
-    $('listBox').innerHTML = ''; $('listMsg').textContent = 'Đang tải · 불러오는 중...';
-    api('parts', { mold_id: moldId }).then(function (j) {
-      $('listMsg').textContent = '';
-      var gc = j.parts.filter(function (p) { return p.kind !== 'TC'; }).map(function (p) { return { code: p.part_id, name: p.name }; });
-      options($('listBox'), gc, null, function (p) { return esc(String(p.code).slice(String(moldId).length)) + '<small>' + esc(p.name) + '</small>'; },
-              function (p) { view('vScan'); gotCode(p.code, 'list'); });
-    }).catch(listFail);
-  }
-  $('btnList').onclick = listMolds;
-  $('btnListBack').onclick = function () { toScan(false); };
-
-  // ---------- start ----------
-  $('selfcheck').textContent = 'Script OK · 프로그램 실행 중  input v' + VER + ' / ' + decoderName;
-  window.onerror = function (m, src, line) { $('selfcheck').textContent += '\nJS error: ' + m + ' @' + line; };
-  if (GAS_RE.test(GAS_URL) && proc && (!fixedProc || proc.code === fixedProc)) { drawBar(); toScan(false); }
-  else openSetup();
+  // ---------- start: masters from this phone first (fast), then refreshed from the sheet ----------
+  var urlProc = (/[?&]proc=([A-Za-z0-9]+)/.exec(location.search) || [])[1];
+  if (urlProc) MT.set('mtProc', urlProc.toUpperCase());
+  try { var c = JSON.parse(MT.get('mtMasters') || 'null'); if (c && c.processes) masters = c; } catch (e) {}
+  if (masters.processes.length) start(); else home('Đang tải · 불러오는 중...', '');
+  if (MT.hasGas()) {
+    MT.api('listMasters').then(function (j) {
+      var first = !masters.processes.length;
+      masters = { processes: j.processes, workers: j.workers };
+      MT.set('mtMasters', JSON.stringify(masters));
+      if (first) { $('last').textContent = ''; start(); } else header();
+    }).catch(function (e) { if (!masters.processes.length) home('', ''); MT.showError('listMasters', e); });
+  } else { home('', ''); }
+})();
 </script>
 </body>
 </html>

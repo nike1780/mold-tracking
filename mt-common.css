@@ -1,0 +1,41 @@
+/* MoldTracking common style - v0.1 (2026-10-04)
+   v0.1: first version. Shared by setup / register / ticket / input pages.
+   Button colours are fixed across all tools: green = nhập/입고 and main action,
+   blue = xuất/출고, grey = secondary, red = error. System fonts only (no web font download). */
+* { box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Malgun Gothic", sans-serif;
+  margin: 0; padding: 12px; background: #eef0ee; color: #17211c; font-size: 16px; line-height: 1.4; }
+.wrap { max-width: 560px; margin: 0 auto; }
+.wrap.wide { max-width: 1100px; }
+h1 { font-size: 20px; margin: 4px 0 12px; }
+h1 small, h2 small { font-weight: 400; color: #5d6762; font-size: 14px; margin-left: 6px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.card { background: #fff; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+button, a.btn { display: block; width: 100%; padding: 16px 12px; margin: 8px 0; font: inherit; font-size: 18px;
+  font-weight: 700; border: 0; border-radius: 10px; color: #fff; text-align: center; text-decoration: none; cursor: pointer; }
+button small, a.btn small { display: block; font-weight: 400; font-size: 14px; opacity: .9; }
+button:disabled { opacity: .45; }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid #f2b300; outline-offset: 2px; }
+.b-in { background: #2e7d5b; } .b-out { background: #2f65a8; } .b-sub { background: #6f7673; }
+.b-big { padding: 28px 12px; font-size: 26px; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+label { display: block; font-size: 14px; color: #47514c; margin: 8px 0 4px; }
+input[type=text], input[type=date], select, textarea { width: 100%; padding: 12px; font: inherit;
+  border: 1px solid #b9c0bb; border-radius: 8px; background: #fff; color: inherit; }
+textarea { min-height: 160px; font-family: ui-monospace, Consolas, monospace; font-size: 13px; white-space: pre; }
+.msg { font-size: 15px; white-space: pre-wrap; word-break: break-word; }
+.ok { color: #1f6a4a; } .ng { color: #b3261e; } .warn { color: #8a5a00; }
+.small { font-size: 12px; color: #5d6762; word-break: break-all; }
+.code { font-family: ui-monospace, Consolas, "Courier New", monospace; font-weight: 700; letter-spacing: .5px; }
+#err { display: none; background: #fdecea; color: #8c1d18; border-radius: 10px; padding: 10px; margin-bottom: 12px;
+  font-size: 14px; white-space: pre-wrap; word-break: break-word; }
+#noaddr { display: none; background: #fff4d6; border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+table.grid { border-collapse: collapse; width: 100%; font-size: 13px; }
+table.grid th, table.grid td { border: 1px solid #cfd5d1; padding: 4px 6px; text-align: left; vertical-align: top; }
+table.grid th { background: #e6eae7; }
+table.grid tr.bad td { background: #fdecea; }
+.tablebox { overflow-x: auto; }
+.pick { display: block; width: 100%; text-align: left; background: #fff; color: #17211c; border: 1px solid #b9c0bb;
+  font-size: 17px; padding: 14px 12px; margin: 6px 0; }
+.pick small { color: #5d6762; }
+@media print { .noprint { display: none !important; } body { background: #fff; padding: 0; } }
